@@ -1,0 +1,14 @@
+# Binaries
+/bin/
+/build/
+
+# Dependencies
+/pkg/mod/
+vendor/
+
+# IDE files
+*.idea/
+*.vscode/
+
+# OS files
+.DS_Store
