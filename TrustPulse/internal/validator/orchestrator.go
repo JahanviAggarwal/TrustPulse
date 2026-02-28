@@ -1,73 +1,123 @@
 package validator
 
 import (
+	"encoding/pem"
 	"fmt"
 	"os"
 
 	"github.com/JahanviAggarwal/TrustPulse/internal/checks"
-	"github.com/JahanviAggarwal/TrustPulse/internal/parser"
 	"github.com/JahanviAggarwal/TrustPulse/internal/policy"
 	"github.com/JahanviAggarwal/TrustPulse/internal/report"
+	"github.com/zmap/zcrypto/x509"
 	"github.com/zmap/zlint/v3"
 	zlintRes "github.com/zmap/zlint/v3/lint"
 )
 
-func RunAudit(certPath string) (string, error) {
-	certBytes, err := os.ReadFile(certPath)
+func RunAudit(filePath string) (string, error) {
+	fileBytes, err := os.ReadFile(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %v", err)
 	}
 
-	cert, err := parser.ParsePEMCertificate(certBytes)
-	if err != nil {
-		return "", err
+	// Decode PEM
+	block, _ := pem.Decode(fileBytes)
+	if block == nil {
+		return "", fmt.Errorf("failed to decode PEM block")
 	}
 
-	isEV := policy.IsEV(cert)
-	isSMIME := policy.IsSMIME(cert)
-	isRootCA := cert.IsCA && cert.Subject.String() == cert.Issuer.String()
+	var cert *x509.Certificate
+	var csr *x509.CertificateRequest
 
-	details := checks.GetCertificateDetails(cert)
+	var errrCSR error
+	var errrCert error
 
-	zlintResult := zlint.LintCertificate(cert)
-	for name, res := range zlintResult.Results {
-		switch res.Status {
-		case zlintRes.Error:
-			details += fmt.Sprintf("❌ [%s]: %s\n", name, res.Details)
-		case zlintRes.Warn:
-			details += fmt.Sprintf("⚠️ [%s]: %s\n", name, res.Details)
+	// Check type
+	switch block.Type {
+	case "CERTIFICATE":
+		var certErr error
+		cert, certErr = x509.ParseCertificate(block.Bytes)
+		errrCert = certErr
+		if certErr != nil {
+			return "", fmt.Errorf("failed to parse certificate: %v", certErr)
 		}
+	case "CERTIFICATE REQUEST":
+		var csrErr error
+		csr, csrErr = x509.ParseCertificateRequest(block.Bytes) // pass raw bytes
+		errrCSR = csrErr
+		if csrErr != nil {
+			return "", fmt.Errorf("failed to parse CSR: %v", csrErr)
+		}
+	default:
+		return "", fmt.Errorf("unsupported PEM type: %s", block.Type)
 	}
 
-	// Run Policy-as-Code rules
 	engine := policy.NewEngine()
-
-	// Rules applied to all type of cert
 	policy.ApplyUniversalRules(engine)
-	if policy.IsTLSServer(cert) && !cert.IsCA {
-		policy.ApplyTLSProfile(engine)
-	}
-	if isEV {
-		policy.ApplyEVProfile(engine)
-	}
-	if isSMIME {
-		fmt.Println("Applying S/MIME specific rules...")
-		policy.ApplySMIMEProfile(engine)
-	}
-	if cert.IsCA {
-		// CA-wide rules
-		policy.ApplyCAProfile(engine)
-		if isRootCA {
-			policy.ApplyRootCAProfile(engine)
+
+	var violations []policy.Violation
+	var details string
+
+	switch block.Type {
+	case "CERTIFICATE":
+		// 1️⃣ Run zlint first
+		zlintResult := zlint.LintCertificate(cert)
+		details = checks.GetCertificateDetails(cert)
+		for name, res := range zlintResult.Results {
+			switch res.Status {
+			case zlintRes.Error:
+				details += fmt.Sprintf("❌ [%s]: %s\n", name, res.Details)
+			case zlintRes.Warn:
+				details += fmt.Sprintf("⚠️ [%s]: %s\n", name, res.Details)
+			}
+
 		}
+
+		// 2️⃣ Detect cert type
+		isEV := policy.IsEV(cert)
+		isSMIME := policy.IsSMIME(cert)
+		isRootCA := cert.IsCA && cert.Subject.String() == cert.Issuer.String()
+
+		// 3️⃣ Apply policy rules
+		if policy.IsTLSServer(cert) && !cert.IsCA {
+			policy.ApplyTLSProfile(engine)
+		}
+		if isEV {
+			policy.ApplyEVProfile(engine)
+		}
+		if isSMIME {
+			policy.ApplySMIMEProfile(engine)
+		}
+		if cert.IsCA {
+			policy.ApplyCAProfile(engine)
+			if isRootCA {
+				policy.ApplyRootCAProfile(engine)
+			}
+		}
+
+		// 4️⃣ Evaluate violations of rules
+		violations = engine.EvaluateCert(cert)
+
+	case "CERTIFICATE REQUEST":
+		csrDetails, err := checks.GetCSRDetails(csr)
+		if err != nil {
+			return "", fmt.Errorf("failed to get CSR details: %v", err)
+		}
+
+		details = "CSR Details:\n" + csrDetails.String() + "\n"
+
+		// Apply only universal rules + any CSR-specific rules
+		violations = engine.EvaluateCSR(csr)
+
+	default:
+		return "", fmt.Errorf("failed to parse certificate or CSR: %v, %v", errrCert, errrCSR)
 	}
 
-	violations := engine.Evaluate(cert)
-
+	// -------------------------------
+	// Append policy violations
+	// -------------------------------
 	if len(violations) == 0 {
 		details += "✅ No policy violations found.\n"
 	} else {
-		// Append policy violations to details
 		for _, v := range violations {
 			switch v.Severity {
 			case policy.SeverityHigh:
@@ -78,7 +128,6 @@ func RunAudit(certPath string) (string, error) {
 		}
 	}
 
-	// 6. Final formatted report
-	finalReport := report.FormatReport(fmt.Sprintf("TrustPulse Audit: %s", certPath), details)
+	finalReport := report.FormatReport(fmt.Sprintf("TrustPulse Audit: %s", filePath), details)
 	return finalReport, nil
 }
