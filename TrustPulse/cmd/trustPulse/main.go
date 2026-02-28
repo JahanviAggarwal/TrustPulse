@@ -9,32 +9,52 @@ import (
 )
 
 func main() {
-	// Check if the user provided a certificate file path
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run cmd/trustPulse/main.go <path-to-cert.pem>")
-		return
+	// Default values
+	mode := "audit"
+	filePath := ""
+
+	// Pre-scan os.Args to capture --mode anywhere and first non-flag as filePath
+	for i := 1; i < len(os.Args); i++ {
+		arg := os.Args[i]
+		switch {
+		case arg == "--mode" && i+1 < len(os.Args):
+			mode = os.Args[i+1]
+			i++ // skip next
+		case strings.HasPrefix(arg, "--mode="):
+			mode = strings.SplitN(arg, "=", 2)[1]
+		case !strings.HasPrefix(arg, "-") && filePath == "":
+			filePath = arg
+		}
 	}
 
-	certPath := os.Args[1]
-	fmt.Printf("Starting PKI Compliance Audit for: %s\n", certPath)
+	if filePath == "" {
+		fmt.Println("Usage: trustpulse [--mode=audit|preissuance] <file>")
+		os.Exit(2)
+	}
 
-	// Execute the audit logic
-	report, err := validator.RunAudit(certPath)
+	fmt.Printf("Starting PKI Compliance Audit for: %s (mode=%s)\n", filePath, mode)
 
-	// 1. Handle system errors (file missing, bad format)
+	report, err := validator.RunAudit(filePath)
 	if err != nil {
 		fmt.Printf("❌ SYSTEM ERROR: %v\n", err)
 		os.Exit(1)
 	}
 
-	// 2. Output the detailed report
+	// Always print the audit report for visibility
 	fmt.Println("\n--- AUDIT REPORT ---")
-	fmt.Println(report)
+	fmt.Println(report.String())
 
-	// 3. Final summary logic for the terminal
-	if strings.Contains(report, "❌") || strings.Contains(report, "⚠️") {
-		fmt.Println("Result: Audit complete. Security issues were identified.")
-	} else {
-		fmt.Println("Result: Audit complete. Certificate is compliant!")
+	if mode == "preissuance" && report.HasBlockingViolations() {
+		fmt.Println("❌ Blocking violations found. Guardrail triggered.")
+		os.Exit(1) // blocks pipeline
+	}
+
+	if mode == "audit" || !report.HasBlockingViolations() {
+		fmt.Println("\nResult: Audit complete.")
+		if report.HasBlockingViolations() {
+			fmt.Println("⚠️ Violations detected (HIGH severity), review recommended.")
+		} else {
+			fmt.Println("✅ No blocking violations. Certificate is compliant!")
+		}
 	}
 }

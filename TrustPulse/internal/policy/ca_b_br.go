@@ -87,7 +87,6 @@ func (r RuleMaxValidity) ValidateCert(cert *x509.Certificate) *Violation {
 }
 
 func (r RuleMaxValidity) ValidateCSR(csr *x509.CertificateRequest) *Violation {
-
 	return nil
 }
 

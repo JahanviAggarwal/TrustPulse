@@ -1,8 +1,6 @@
 package policy
 
 import (
-	"fmt"
-
 	"github.com/zmap/zcrypto/encoding/asn1"
 	"github.com/zmap/zcrypto/x509"
 )
@@ -121,7 +119,6 @@ func IsSMIME(cert *x509.Certificate) bool {
 	// First check known EKUs
 	for _, eku := range cert.ExtKeyUsage {
 		if eku == x509.ExtKeyUsageEmailProtection {
-			fmt.Println("Matched ExtKeyUsageEmailProtection")
 			return true
 		}
 	}
@@ -129,7 +126,6 @@ func IsSMIME(cert *x509.Certificate) bool {
 	// Then check unknown EKUs (for raw OIDs)
 	for _, oid := range cert.UnknownExtKeyUsage {
 		if oid.Equal(asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 4}) {
-			fmt.Println("Matched UnknownExtKeyUsage OID 1.3.6.1.5.5.7.3.4")
 			return true
 		}
 	}

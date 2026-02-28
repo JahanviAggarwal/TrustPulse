@@ -34,3 +34,7 @@ func ApplyUniversalRules(engine *Engine) {
 	engine.Register(&RuleMinRSAKeySize{})
 	engine.Register(&RulePQCKeySize{})
 }
+
+func ApplyCSRRules(engine * Engine){
+	engine.Register(&RuleSANRequired{})
+}
