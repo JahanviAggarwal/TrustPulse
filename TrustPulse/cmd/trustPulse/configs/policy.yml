@@ -1,0 +1,48 @@
+version: "1.0"
+
+csr:
+  min_rsa_key_size: 2048
+  allowed_signature_algorithms:
+    - SHA256-RSA
+    - ECDSA-SHA256
+  require_san: true
+
+certificate:
+  min_rsa_key_size: 2048
+  max_validity_days: 398
+  allowed_signature_algorithms:
+    - SHA256-RSA
+    - ECDSA-SHA256
+  require_san: true
+  enable_pqc_checks: true
+  allowed_pqc_oids:
+    - "2.16.840.1.101.3.4.1.56"
+    - "2.16.840.1.101.3.4.1.57"
+  disallow_low_security_pqc: true
+
+enforcement:
+  mode: "audit"
+  fail_on: ["HIGH"]
+
+ev:
+  enabled: true
+  required_subject_fields:
+    organization: true
+    country: true
+    business_category: true
+  required_ekus:
+    - 1
+
+smime:
+  enabled: true
+  require_eku:
+    - 4
+  require_email: true
+  require_revocation: true
+  require_digital_signature: true
+
+tls_server:
+  require_san: true
+
+root:
+  min_rsa_key_size: 2048
