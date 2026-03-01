@@ -16,11 +16,22 @@ func (e *Engine) Register(rule Rule) {
 	e.rules = append(e.rules, rule)
 }
 
-func (e *Engine) EvaluateCert(cert *zcrypto.Certificate) []Violation {
+func (e *Engine) EvaluateCert(cert *zcrypto.Certificate, p *Policy) []Violation {
+	var violations []Violation
+	for _, rule := range e.rules {
+		vs := rule.ValidateCert(cert, p)
+		for _, v := range vs {
+			violations = append(violations, *v)
+		}
+	}
+	return violations
+}
+func (e *Engine) EvaluateCSR(csr *zcrypto.CertificateRequest, p *Policy) []Violation {
 	var violations []Violation
 
 	for _, rule := range e.rules {
-		if v := rule.ValidateCert(cert); v != nil {
+		vs := rule.ValidateCSR(csr, p)
+		for _, v := range vs {
 			violations = append(violations, *v)
 		}
 	}
@@ -28,14 +39,20 @@ func (e *Engine) EvaluateCert(cert *zcrypto.Certificate) []Violation {
 	return violations
 }
 
-func (e *Engine) EvaluateCSR(csr *zcrypto.CertificateRequest) []Violation {
-	var violations []Violation
+func BuildEngine(policy *Policy) *Engine {
+	engine := NewEngine()
 
-	for _, rule := range e.rules {
-		if v := rule.ValidateCSR(csr); v != nil {
-			violations = append(violations, *v)
-		}
-	}
+	// Universal rules (always apply)
+	engine.Register(&RuleUniversalCert{Policy: &policy.Certificate})
+	engine.Register(&RuleUniversalCSR{Policy: &policy.CSR})
 
-	return violations
+	// TLS-specific rules
+	engine.Register(&RuleTLSServerCert{Policy: &policy.TLSServer})
+
+	// Optional feature-based rules
+	engine.Register(&RuleSMIME{Policy: &policy.SMIME})
+	engine.Register(&RuleEV{Policy: &policy.EV})
+	engine.Register(&RuleRoot{Policy: &policy.Root})
+
+	return engine
 }

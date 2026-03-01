@@ -2,7 +2,10 @@ module github.com/JahanviAggarwal/TrustPulse
 
 go 1.25.1
 
-require github.com/zmap/zcrypto v0.0.0-20260219200111-6eed1af18965
+require (
+	github.com/zmap/zcrypto v0.0.0-20260219200111-6eed1af18965
+	gopkg.in/yaml.v3 v3.0.1
+)
 
 require github.com/pelletier/go-toml v1.9.5 // indirect
 

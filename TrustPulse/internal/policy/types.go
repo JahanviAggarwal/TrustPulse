@@ -40,14 +40,19 @@ type Report struct {
 }
 
 type Rule interface {
-	ValidateCert(cert *x509.Certificate) *Violation
-	ValidateCSR(csr *x509.CertificateRequest) *Violation
+	ValidateCert(cert *x509.Certificate, p *Policy) []*Violation
+	ValidateCSR(csr *x509.CertificateRequest, p *Policy) []*Violation
 }
 
-func (r *Report) HasBlockingViolations() bool {
+func (r *Report) ShouldFail(p *Policy, runMode string) bool {
+	if runMode == "audit" {
+		return false
+	}
 	for _, v := range r.Violations {
-		if v.Severity == SeverityHigh {
-			return true
+		for _, sev := range p.Enforcement.FailOn {
+			if v.Severity == sev {
+				return true
+			}
 		}
 	}
 	return false
@@ -68,11 +73,11 @@ func (r *Report) String() string {
 		sb.WriteString("✅ No policy violations found.\n")
 	} else {
 		for _, v := range r.Violations {
-			icon := "⚠️"
-			if v.Severity == SeverityHigh {
-				icon = "❌"
-			}
-			sb.WriteString(fmt.Sprintf("%s [%s]: %s (%s)\n", icon, v.RuleID, v.Message, v.Standard))
+			// icon := "⚠️"
+			// if v.Severity == SeverityHigh {
+			// 	icon = "❌"
+			// }
+			sb.WriteString(fmt.Sprintf("%s [%s]: %s (%s)\n", v.Severity, v.RuleID, v.Message, v.Standard))
 		}
 	}
 

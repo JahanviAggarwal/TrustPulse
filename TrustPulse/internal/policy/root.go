@@ -3,89 +3,81 @@ package policy
 import (
 	"crypto/rsa"
 
-	"github.com/zmap/zcrypto/x509"
+	zcrypto "github.com/zmap/zcrypto/x509"
 )
 
-// ----------------------
-// Rule: Root Self-Signed
-// ----------------------
-type RuleRootSelfSigned struct{}
+// ----------------------------
+// Root Certificate Rules
+// ----------------------------
+type RuleRoot struct {
+	Policy *RootPolicy
+}
 
-func (r *RuleRootSelfSigned) ValidateCert(cert *x509.Certificate) *Violation {
-
-	if !cert.IsCA {
+func (r *RuleRoot) ValidateCert(cert *zcrypto.Certificate, p *Policy) []*Violation {
+	if r.Policy == nil || !r.Policy.Enabled || !cert.IsCA {
 		return nil
 	}
 
-	// Verify certificate is self-signed
-	if err := cert.CheckSignatureFrom(cert); err != nil {
-		return &Violation{
-			RuleID:   "ROOT-NOT-SELF-SIGNED",
-			Severity: SeverityHigh,
-			Message:  "Root CA certificate is not self-signed",
-			Standard: "Root Program Policy",
+	var violations []*Violation
+
+	// Self-signed check
+	if r.Policy.RequireSelfSigned {
+		if err := cert.CheckSignatureFrom(cert); err != nil {
+			violations = append(violations, &Violation{
+				RuleID:   "ROOT-NOT-SELF-SIGNED",
+				Severity: SeverityHigh,
+				Message:  "Root CA certificate is not self-signed",
+				Standard: "Root Program Policy",
+			})
 		}
 	}
 
-	return nil
-}
-
-func (r *RuleRootSelfSigned) ValidateCSR(csr *x509.CertificateRequest) *Violation {
-	// CSR cannot be self-signed root certificate
-	return nil
-}
-
-// ----------------------
-// Rule: Root Key Size
-// ----------------------
-type RuleRootKeySize struct{}
-
-func (r *RuleRootKeySize) ValidateCert(cert *x509.Certificate) *Violation {
-
-	if !cert.IsCA {
-		return nil
-	}
-
-	rsaKey, ok := cert.PublicKey.(*rsa.PublicKey)
-	if ok && rsaKey.Size()*8 < 2048 {
-		return &Violation{
-			RuleID:   "ROOT-KEY-SIZE",
-			Severity: SeverityHigh,
-			Message:  "Root CA RSA key size less than 2048 bits",
-			Standard: "Mozilla/Apple/Microsoft Root Policy",
+	//  Minimum RSA key size
+	if rsaKey, ok := cert.PublicKey.(*rsa.PublicKey); ok {
+		if rsaKey.Size()*8 < r.Policy.MinRSAKeySize {
+			violations = append(violations, &Violation{
+				RuleID:   "ROOT-KEY-SIZE",
+				Severity: SeverityHigh,
+				Message:  "Root CA RSA key size below policy minimum",
+				Standard: "Root Program Policy",
+			})
 		}
 	}
 
-	return nil
-}
-
-func (r *RuleRootKeySize) ValidateCSR(csr *x509.CertificateRequest) *Violation {
-	// Root key size is enforced after issuance
-	return nil
-}
-
-// ----------------------
-// Rule: CA Key Usage
-// ----------------------
-type RuleCAKeyUsage struct{}
-
-func (r *RuleCAKeyUsage) ValidateCert(cert *x509.Certificate) *Violation {
-
-	if cert.IsCA {
-		if cert.KeyUsage&x509.KeyUsageCertSign == 0 {
-			return &Violation{
+	// KeyUsage check
+	if r.Policy.RequireKeyUsageCertSign {
+		if cert.KeyUsage&zcrypto.KeyUsageCertSign == 0 {
+			violations = append(violations, &Violation{
 				RuleID:   "RFC5280-CA-KEYUSAGE",
 				Severity: SeverityHigh,
-				Message:  "CA certificate does not have keyCertSign usage",
+				Message:  "CA certificate missing keyCertSign usage",
 				Standard: "RFC 5280 Section 4.2.1.3",
-			}
+			})
 		}
 	}
 
-	return nil
+	return violations
 }
 
-func (r *RuleCAKeyUsage) ValidateCSR(csr *x509.CertificateRequest) *Violation {
-	// KeyUsage extension not reliably available in CSR
-	return nil
+func (r *RuleRoot) ValidateCSR(csr *zcrypto.CertificateRequest, p *Policy) []*Violation {
+	// Root CSR pre-issuance checks
+	if r.Policy == nil || !r.Policy.Enabled {
+		return nil
+	}
+
+	var violations []*Violation
+
+	// Example: enforce minimum RSA key size in pre-issuance CSR
+	if rsaKey, ok := csr.PublicKey.(*rsa.PublicKey); ok {
+		if rsaKey.Size()*8 < r.Policy.MinRSAKeySize {
+			violations = append(violations, &Violation{
+				RuleID:   "CSR-ROOT-KEY-001",
+				Severity: SeverityHigh,
+				Message:  "CSR RSA key size below root policy minimum",
+				Standard: "Pre-issuance Root Policy",
+			})
+		}
+	}
+
+	return violations
 }

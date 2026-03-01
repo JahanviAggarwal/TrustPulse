@@ -2,114 +2,239 @@ package policy
 
 import (
 	"crypto/rsa"
+	"strings"
 	"time"
 
 	"github.com/zmap/zcrypto/x509"
 )
 
-type RuleMinRSAKeySize struct{}
-type RuleNoSHA1 struct{}
-type RuleMaxValidity struct{}
-type RuleSANRequired struct{}
+type RuleTLSServerCert struct {
+	Policy *TLSServerPolicy
+}
 
-func (r RuleMinRSAKeySize) ValidateCert(cert *x509.Certificate) *Violation {
+type RuleUniversalCert struct {
+	Policy *CertificatePolicy
+}
+
+type RuleUniversalCSR struct {
+	Policy *CSRPolicy
+}
+func (r *RuleUniversalCert) ValidateCert(cert *x509.Certificate, p *Policy) []*Violation {
+	if r.Policy == nil {
+		return nil
+	}
+
+	var violations []*Violation
+
+	// 1️⃣ Minimum RSA key size
 	if cert.PublicKeyAlgorithm == x509.RSA {
-		key := cert.PublicKey.(*rsa.PublicKey)
-		if key.Size()*8 < 2048 {
-			return &Violation{
-				RuleID:   "CABF-KEY-001",
-				Standard: "CA/B Forum BR 6.1.5",
-				Severity: SeverityHigh,
-				Message:  "RSA key size is less than 2048 bits",
+		if rsaKey, ok := cert.PublicKey.(*rsa.PublicKey); ok {
+			if rsaKey.Size()*8 < r.Policy.MinRSAKeySize {
+				violations = append(violations, &Violation{
+					RuleID:   "CERT-KEY-001",
+					Standard: "Certificate Policy",
+					Severity: SeverityHigh,
+					Message:  "RSA key size below minimum requirement",
+				})
 			}
 		}
 	}
+
+	// 2️⃣ Allowed signature algorithms
+	if len(r.Policy.AllowedSignatureAlgorithms) > 0 {
+		allowed := false
+		sig := cert.SignatureAlgorithm.String()
+		for _, a := range r.Policy.AllowedSignatureAlgorithms {
+			if strings.EqualFold(a, sig) {
+				allowed = true
+				break
+			}
+		}
+
+		if !allowed {
+			violations = append(violations, &Violation{
+				RuleID:   "CERT-SIG-001",
+				Standard: "Certificate Policy",
+				Severity: SeverityHigh,
+				Message:  "Signature algorithm not allowed by policy",
+			})
+		}
+	}
+
+	// 3️⃣ Maximum validity
+	if r.Policy.MaxValidityDays > 0 {
+		maxDuration := time.Duration(r.Policy.MaxValidityDays) * 24 * time.Hour
+		if cert.NotAfter.Sub(cert.NotBefore) > maxDuration {
+			violations = append(violations, &Violation{
+				RuleID:   "CERT-VAL-001",
+				Standard: "Certificate Policy",
+				Severity: SeverityMedium,
+				Message:  "Certificate validity exceeds policy maximum",
+			})
+		}
+	}
+
+	// 4️⃣ SAN required (generic, if enabled)
+	if r.Policy.RequireSAN {
+		if len(cert.DNSNames) == 0 &&
+			len(cert.EmailAddresses) == 0 &&
+			len(cert.IPAddresses) == 0 {
+			violations = append(violations, &Violation{
+				RuleID:   "CERT-SAN-001",
+				Standard: "Certificate Policy",
+				Severity: SeverityHigh,
+				Message:  "Subject Alternative Name extension is required",
+			})
+		}
+	}
+
+	// 5️⃣ PQC checks (if enabled)
+	if r.Policy.EnablePQCChecks {
+		algoOID := cert.PublicKeyAlgorithmOID.String()
+
+		// Check allowlist
+		if len(r.Policy.AllowedPQCOIDs) > 0 {
+			allowed := false
+			for _, oid := range r.Policy.AllowedPQCOIDs {
+				if algoOID == oid {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				violations = append(violations, &Violation{
+					RuleID:   "RFC5280-PQC-NOT-ALLOWED",
+					Severity: SeverityHigh,
+					Message:  "Certificate uses disallowed PQC algorithm OID: " + algoOID,
+					Standard: "RFC5280 / NIST PQC",
+				})
+			}
+		}
+
+		// Example downgrade warning for Kyber-512
+		if algoOID == "2.16.840.1.101.3.4.1.55" && r.Policy.DisallowLowSecurityPQC {
+			violations = append(violations, &Violation{
+				RuleID:   "RFC5280-PQC-LOW-SECURITY",
+				Severity: SeverityMedium,
+				Message:  "Certificate uses ML-KEM-512 (lower security level)",
+				Standard: "NIST PQC",
+			})
+		}
+	}
+
+	return violations
+}
+
+func (r *RuleUniversalCert) ValidateCSR(csr *x509.CertificateRequest, p *Policy) []*Violation {
 	return nil
 }
 
-func (r RuleMinRSAKeySize) ValidateCSR(csr *x509.CertificateRequest) *Violation {
+func (r *RuleUniversalCSR) ValidateCSR(csr *x509.CertificateRequest, p *Policy) []*Violation {
+	if r.Policy == nil {
+		return nil
+	}
+
+	var violations []*Violation
+
+	// 1️⃣ Minimum RSA key size
 	if csr.PublicKeyAlgorithm == x509.RSA {
 		key := csr.PublicKey.(*rsa.PublicKey)
-		if key.Size()*8 < 2048 {
-			return &Violation{
+		if key.Size()*8 < r.Policy.MinRSAKeySize {
+			violations = append(violations, &Violation{
 				RuleID:   "CSR-KEY-001",
-				Standard: "Pre-issuance guardrail: RSA key < 2048",
+				Standard: "Pre-issuance guardrail",
 				Severity: SeverityHigh,
-				Message:  "CSR RSA key size is less than 2048 bits",
+				Message:  "CSR RSA key size below minimum requirement",
+			})
+		}
+	}
+
+	// 2️⃣ Allowed signature algorithms
+	if len(r.Policy.AllowedSignatureAlgorithms) > 0 {
+		allowed := false
+		sig := csr.SignatureAlgorithm.String()
+
+		for _, a := range r.Policy.AllowedSignatureAlgorithms {
+			if strings.EqualFold(a, sig) {
+				allowed = true
+				break
 			}
 		}
-	}
-	return nil
-}
 
-func (r RuleNoSHA1) ValidateCert(cert *x509.Certificate) *Violation {
-	if cert.SignatureAlgorithm == x509.SHA1WithRSA ||
-		cert.SignatureAlgorithm == x509.DSAWithSHA1 ||
-		cert.SignatureAlgorithm == x509.ECDSAWithSHA1 {
-
-		return &Violation{
-			RuleID:   "CABF-SIG-001",
-			Standard: "CA/B Forum BR 7.1.3",
-			Severity: SeverityHigh,
-			Message:  "SHA1 signature algorithm is not allowed for issued certificates",
+		if !allowed {
+			violations = append(violations, &Violation{
+				RuleID:   "CSR-SIG-001",
+				Standard: "Pre-issuance guardrail",
+				Severity: SeverityHigh,
+				Message:  "CSR signature algorithm not allowed by policy",
+			})
 		}
 	}
-	return nil
-}
 
-// ValidateCSR checks a pre-issuance CSR
-func (r RuleNoSHA1) ValidateCSR(csr *x509.CertificateRequest) *Violation {
-	if csr.SignatureAlgorithm == x509.SHA1WithRSA ||
-		csr.SignatureAlgorithm == x509.DSAWithSHA1 ||
-		csr.SignatureAlgorithm == x509.ECDSAWithSHA1 {
+	// 3️⃣ SAN required (generic)
+	if r.Policy.RequireSAN {
+		if len(csr.DNSNames) == 0 &&
+			len(csr.EmailAddresses) == 0 &&
+			len(csr.IPAddresses) == 0 {
 
-		return &Violation{
-			RuleID:   "CSR-SIG-001",
-			Standard: "Pre-issuance guardrail: CA/B Forum BR 7.1.3",
-			Severity: SeverityHigh,
-			Message:  "SHA1 signature algorithm is not allowed in CSR",
+			violations = append(violations, &Violation{
+				RuleID:   "CSR-SAN-001",
+				Standard: "Pre-issuance guardrail",
+				Severity: SeverityHigh,
+				Message:  "CSR missing Subject Alternative Name extension",
+			})
 		}
 	}
+
+	return violations
+}
+
+func (r *RuleUniversalCSR) ValidateCert(cert *x509.Certificate, p *Policy) []*Violation {
 	return nil
 }
 
-func (r RuleMaxValidity) ValidateCert(cert *x509.Certificate) *Violation {
-	maxDuration := 398 * 24 * time.Hour
-	if cert.NotAfter.Sub(cert.NotBefore) > maxDuration {
-		return &Violation{
-			RuleID:   "CABF-VAL-001",
-			Standard: "CA/B Forum BR 6.3.2",
-			Severity: SeverityMedium,
-			Message:  "Certificate validity exceeds 398 days",
+func (r *RuleTLSServerCert) ValidateCert(cert *x509.Certificate, p *Policy) []*Violation {
+	if r.Policy == nil {
+		return nil
+	}
+
+	var violations []*Violation
+	// 1️⃣ SAN required for TLS
+	if r.Policy.RequireSAN {
+		if len(cert.DNSNames) == 0 &&
+			len(cert.IPAddresses) == 0 {
+
+			violations = append(violations, &Violation{
+				RuleID:   "TLS-SAN-001",
+				Standard: "CA/B Forum BR 7.1.4.2.1",
+				Severity: SeverityHigh,
+				Message:  "TLS certificate must contain DNS or IP SAN",
+			})
 		}
 	}
-	return nil
+
+	return violations
 }
 
-func (r RuleMaxValidity) ValidateCSR(csr *x509.CertificateRequest) *Violation {
-	return nil
-}
+func (r *RuleTLSServerCert) ValidateCSR(csr *x509.CertificateRequest, p *Policy) []*Violation {
+	if r.Policy == nil {
+		return nil
+	}
 
-func (r RuleSANRequired) ValidateCert(cert *x509.Certificate) *Violation {
-	if len(cert.DNSNames) == 0 && len(cert.EmailAddresses) == 0 && len(cert.IPAddresses) == 0 {
-		return &Violation{
-			RuleID:   "CABF-SAN-001",
-			Standard: "CA/B Forum BR 7.1.4.2.1",
-			Severity: SeverityHigh,
-			Message:  "Subject Alternative Name extension is missing",
+	var violations []*Violation
+
+	if r.Policy.RequireSAN {
+		if len(csr.DNSNames) == 0 &&
+			len(csr.IPAddresses) == 0 {
+
+			violations = append(violations, &Violation{
+				RuleID:   "TLS-CSR-SAN-001",
+				Standard: "Pre-issuance TLS policy",
+				Severity: SeverityHigh,
+				Message:  "TLS CSR must contain DNS or IP SAN",
+			})
 		}
 	}
-	return nil
-}
 
-func (r RuleSANRequired) ValidateCSR(csr *x509.CertificateRequest) *Violation {
-	if len(csr.DNSNames) == 0 && len(csr.EmailAddresses) == 0 && len(csr.IPAddresses) == 0 {
-		return &Violation{
-			RuleID:   "CSR-SAN-001",
-			Standard: "CA/B Forum BR 7.1.4.2.1",
-			Severity: SeverityHigh,
-			Message:  "CSR missing Subject Alternative Name extension",
-		}
-	}
-	return nil
+	return violations
 }
