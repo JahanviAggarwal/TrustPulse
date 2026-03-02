@@ -97,5 +97,4 @@ func RunAudit(filePath string, p *policy.Policy) (*policy.Report, error) {
 	return &policy.Report{
 		Violations: violations,
 		Details:    details,
-	}, nil
-}
+	}, nil}

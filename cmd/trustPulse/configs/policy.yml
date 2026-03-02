@@ -34,7 +34,7 @@ ev:
     - 1
 
 smime:
-  enabled: true
+  enabled: false
   require_eku:
     - 4
   require_email: true
@@ -46,3 +46,7 @@ tls_server:
 
 root:
   min_rsa_key_size: 2048
+  allowed_signature_algorithms:
+    - SHA256-RSA
+    - ECDSA-SHA256
+  require_key_usage: true

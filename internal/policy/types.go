@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -34,6 +35,21 @@ type Violation struct {
 	Message  string   `json:"message"`
 }
 
+// Summary provides aggregate counts across all violations in a Report.
+type Summary struct {
+	Total  int  `json:"total"`
+	High   int  `json:"high"`
+	Medium int  `json:"medium"`
+	Low    int  `json:"low"`
+	Passed bool `json:"passed"`
+}
+
+// jsonReport is the serialisable form of a Report (excludes raw cert/CSR details).
+type jsonReport struct {
+	Summary    Summary     `json:"summary"`
+	Violations []Violation `json:"violations"`
+}
+
 type Report struct {
 	Violations []Violation
 	Details    string // store raw certificate/CSR details
@@ -42,6 +58,41 @@ type Report struct {
 type Rule interface {
 	ValidateCert(cert *x509.Certificate, p *Policy) []*Violation
 	ValidateCSR(csr *x509.CertificateRequest, p *Policy) []*Violation
+}
+
+// BuildSummary computes violation counts and sets Passed based on policy
+// enforcement rules. Call this before JSON() or after all violations are known.
+func (r *Report) BuildSummary(p *Policy, runMode string) Summary {
+	s := Summary{Total: len(r.Violations)}
+	for _, v := range r.Violations {
+		switch v.Severity {
+		case SeverityHigh:
+			s.High++
+		case SeverityMedium:
+			s.Medium++
+		case SeverityLow:
+			s.Low++
+		}
+	}
+	s.Passed = !r.ShouldFail(p, runMode)
+	return s
+}
+
+// JSON returns an indented JSON representation of the report, including a
+// summary of violation counts. It never includes raw PEM/cert detail text.
+func (r *Report) JSON(p *Policy, runMode string) (string, error) {
+	jr := jsonReport{
+		Summary:    r.BuildSummary(p, runMode),
+		Violations: r.Violations,
+	}
+	if jr.Violations == nil {
+		jr.Violations = []Violation{} // ensure "violations": [] not null
+	}
+	b, err := json.MarshalIndent(jr, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 func (r *Report) ShouldFail(p *Policy, runMode string) bool {
@@ -58,7 +109,7 @@ func (r *Report) ShouldFail(p *Policy, runMode string) bool {
 	return false
 }
 
-// Pretty-print the report for CLI output
+// String returns a human-readable text representation of the report.
 func (r *Report) String() string {
 	var sb strings.Builder
 
@@ -73,10 +124,6 @@ func (r *Report) String() string {
 		sb.WriteString("✅ No policy violations found.\n")
 	} else {
 		for _, v := range r.Violations {
-			// icon := "⚠️"
-			// if v.Severity == SeverityHigh {
-			// 	icon = "❌"
-			// }
 			sb.WriteString(fmt.Sprintf("%s [%s]: %s (%s)\n", v.Severity, v.RuleID, v.Message, v.Standard))
 		}
 	}
