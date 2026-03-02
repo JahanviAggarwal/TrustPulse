@@ -3,11 +3,16 @@ module github.com/JahanviAggarwal/TrustPulse
 go 1.25.1
 
 require (
+	github.com/stretchr/testify v1.11.1
 	github.com/zmap/zcrypto v0.0.0-20260219200111-6eed1af18965
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require github.com/pelletier/go-toml v1.9.5 // indirect
+require (
+	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/pelletier/go-toml v1.9.5 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+)
 
 require (
 	github.com/weppos/publicsuffix-go v0.50.3-0.20260108123922-15eaa75052c0 // indirect
