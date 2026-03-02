@@ -5,12 +5,13 @@ import (
 	stdpkix "crypto/x509/pkix"
 	"testing"
 
+	"github.com/JahanviAggarwal/TrustPulse/internal/models"
 	"github.com/stretchr/testify/require"
 	zcrypto "github.com/zmap/zcrypto/x509"
 )
 
-func enabledSMIMEPolicy() *SMIMEPolicy {
-	return &SMIMEPolicy{
+func enabledSMIMEPolicy() *models.SMIMEPolicy {
+	return &models.SMIMEPolicy{
 		Enabled:                 true,
 		RequireEKU:              []zcrypto.ExtKeyUsage{zcrypto.ExtKeyUsageEmailProtection},
 		RequireEmail:            true,
@@ -24,7 +25,7 @@ func TestRuleSMIME_Disabled_Skipped(t *testing.T) {
 		keyBits: 2048,
 		subject: stdpkix.Name{CommonName: "no-smime.example.com"},
 	})
-	rule := &RuleSMIME{Policy: &SMIMEPolicy{Enabled: false}}
+	rule := &RuleSMIME{Policy: &models.SMIMEPolicy{Enabled: false}}
 	vs := rule.ValidateCert(cert.ZCert, DefaultPolicy())
 	require.Empty(t, vs, "expected no violations when S/MIME policy is disabled")
 }

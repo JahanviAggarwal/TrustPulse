@@ -5,29 +5,31 @@ import (
 	"os"
 	"strings"
 
+	"github.com/JahanviAggarwal/TrustPulse/internal/models"
 	"github.com/JahanviAggarwal/TrustPulse/internal/policy"
 	"github.com/JahanviAggarwal/TrustPulse/internal/validator"
 )
 
 func main() {
 	mode := "audit"
-	format := "json" // default output format; use --format=text for human-readable
+	format := "json"
 	filePath := ""
 	policyPath := ""
 
 	for i := 1; i < len(os.Args); i++ {
 		arg := os.Args[i]
-
 		switch {
 		case arg == "--mode" && i+1 < len(os.Args):
 			mode = os.Args[i+1]
 			i++
+
 		case strings.HasPrefix(arg, "--mode="):
 			mode = strings.SplitN(arg, "=", 2)[1]
 
 		case arg == "--policy" && i+1 < len(os.Args):
 			policyPath = os.Args[i+1]
 			i++
+
 		case strings.HasPrefix(arg, "--policy="):
 			policyPath = strings.SplitN(arg, "=", 2)[1]
 
@@ -44,65 +46,59 @@ func main() {
 	}
 
 	if filePath == "" {
-		fmt.Println("Usage: trustpulse [--mode=audit|preissuance] [--policy=policy.yaml] [--format=json|text] <file>")
+		fmt.Println("Usage: trustpulse [--mode=audit|preissuance] [--policy=policy.yml] [--format=json|text] <file>")
 		os.Exit(2)
 	}
 
 	if format != "json" && format != "text" {
-		fmt.Fprintf(os.Stderr, "❌ Unknown format %q — must be 'json' or 'text'\n", format)
+		fmt.Fprintf(os.Stderr, "unknown format %q — use 'json' or 'text'\n", format)
 		os.Exit(2)
 	}
 
-	// 🔐 Load Policy
-	var p *policy.Policy
-	var err error
+	var (
+		p   *models.Policy
+		err error
+	)
 
 	if policyPath != "" {
 		p, err = policy.LoadPolicy(policyPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Failed to load policy: %v\n", err)
+			fmt.Fprintf(os.Stderr, "failed to load policy: %v\n", err)
 			os.Exit(1)
 		}
-		if format == "text" {
-			fmt.Println("✅ Policy loaded successfully:")		}
 	} else {
 		p = policy.DefaultPolicy()
 	}
 
 	if format == "text" {
-		fmt.Printf("Starting PKI Compliance Audit for: %s (mode=%s)\n", filePath, mode)
+		fmt.Printf("TrustPulse — auditing %s (mode=%s)\n", filePath, mode)
 	}
 
 	report, err := validator.RunAudit(filePath, p)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ SYSTEM ERROR: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 
-	// ─── Output ──────
 	switch format {
 	case "text":
-		fmt.Println("\n--- AUDIT REPORT ---")
 		fmt.Println(report.String())
 
-	default: // "json"
+	default:
 		out, err := report.JSON(p, mode)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Failed to serialise report: %v\n", err)
+			fmt.Fprintf(os.Stderr, "failed to serialize report: %v\n", err)
 			os.Exit(1)
 		}
+
 		fmt.Println(out)
 	}
 
-	// 🔥 Policy-driven enforcement (applies regardless of output format)
 	if report.ShouldFail(p, mode) {
 		if format == "text" {
-			fmt.Println("❌ Policy enforcement triggered. Blocking execution.")
+			fmt.Fprintln(os.Stderr, "policy enforcement triggered — exiting non-zero")
 		}
-		os.Exit(1)
-	}
 
-	if format == "text" {
-		fmt.Println("\nResult: Audit complete.")
+		os.Exit(1)
 	}
 }

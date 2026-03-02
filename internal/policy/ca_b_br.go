@@ -1,159 +1,189 @@
 package policy
 
 import (
+	"crypto/ecdsa"
 	"crypto/rsa"
+	"fmt"
 	"strings"
 	"time"
 
+	"github.com/JahanviAggarwal/TrustPulse/internal/models"
 	"github.com/zmap/zcrypto/x509"
 )
 
 type RuleTLSServerCert struct {
-	Policy *TLSServerPolicy
+	Policy *models.TLSServerPolicy
 }
 
 type RuleUniversalCert struct {
-	Policy *CertificatePolicy
+	Policy *models.CertificatePolicy
 }
 
 type RuleUniversalCSR struct {
-	Policy *CSRPolicy
+	Policy *models.CSRPolicy
 }
-func (r *RuleUniversalCert) ValidateCert(cert *x509.Certificate, p *Policy) []*Violation {
+
+func (r *RuleUniversalCert) ValidateCert(cert *x509.Certificate, p *models.Policy) []*models.Violation {
 	if r.Policy == nil {
 		return nil
 	}
 
-	var violations []*Violation
+	var violations []*models.Violation
 
-	// 1️⃣ Minimum RSA key size
+	// RSA key size
 	if cert.PublicKeyAlgorithm == x509.RSA {
 		if rsaKey, ok := cert.PublicKey.(*rsa.PublicKey); ok {
 			if rsaKey.Size()*8 < r.Policy.MinRSAKeySize {
-				violations = append(violations, &Violation{
+				violations = append(violations, &models.Violation{
 					RuleID:   "CERT-KEY-001",
 					Standard: "Certificate Policy",
-					Severity: SeverityHigh,
+					Severity: models.SeverityHigh,
 					Message:  "RSA key size below minimum requirement",
 				})
 			}
 		}
 	}
 
-	// 2️⃣ Allowed signature algorithms
+	// ECDSA minimum curve strength (P-192/P-224 are below modern baselines).
+	// Set MinECDSACurveBits=0 to skip this check.
+	// Note: zcrypto wraps ECDSA keys in *x509.AugmentedECDSA, so we handle both forms.
+	if r.Policy.MinECDSACurveBits > 0 && cert.PublicKeyAlgorithm == x509.ECDSA {
+		var curveBits int
+		var curveName string
+
+		switch pub := cert.PublicKey.(type) {
+		case *ecdsa.PublicKey:
+			curveBits = pub.Params().BitSize
+			curveName = pub.Params().Name
+
+		case *x509.AugmentedECDSA:
+			curveBits = pub.Pub.Params().BitSize
+			curveName = pub.Pub.Params().Name
+		}
+
+		if curveBits > 0 && curveBits < r.Policy.MinECDSACurveBits {
+			violations = append(violations, &models.Violation{
+				RuleID:   "CERT-ECDSA-CURVE-001",
+				Standard: "Certificate Policy",
+				Severity: models.SeverityHigh,
+				Message: fmt.Sprintf(
+					"ECDSA curve %s (%d bits) is below policy minimum of %d bits",
+					curveName, curveBits, r.Policy.MinECDSACurveBits,
+				),
+			})
+		}
+	}
+
+	// Signature algorithm allow-list
 	if len(r.Policy.AllowedSignatureAlgorithms) > 0 {
-		allowed := false
 		sig := cert.SignatureAlgorithm.String()
+		allowed := false
 		for _, a := range r.Policy.AllowedSignatureAlgorithms {
 			if strings.EqualFold(a, sig) {
 				allowed = true
 				break
 			}
 		}
-
 		if !allowed {
-			violations = append(violations, &Violation{
+			violations = append(violations, &models.Violation{
 				RuleID:   "CERT-SIG-001",
 				Standard: "Certificate Policy",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message:  "Signature algorithm not allowed by policy",
 			})
 		}
 	}
 
-	// 3️⃣ Maximum validity
+	// Maximum validity period
 	if r.Policy.MaxValidityDays > 0 {
 		maxDuration := time.Duration(r.Policy.MaxValidityDays) * 24 * time.Hour
 		if cert.NotAfter.Sub(cert.NotBefore) > maxDuration {
-			violations = append(violations, &Violation{
+			violations = append(violations, &models.Violation{
 				RuleID:   "CERT-VAL-001",
 				Standard: "Certificate Policy",
-				Severity: SeverityMedium,
+				Severity: models.SeverityMedium,
 				Message:  "Certificate validity exceeds policy maximum",
 			})
 		}
 	}
 
-	// 4️⃣ SAN required (generic, if enabled)
+	// SAN presence
 	if r.Policy.RequireSAN {
-		if len(cert.DNSNames) == 0 &&
-			len(cert.EmailAddresses) == 0 &&
-			len(cert.IPAddresses) == 0 {
-			violations = append(violations, &Violation{
+		if len(cert.DNSNames) == 0 && len(cert.EmailAddresses) == 0 && len(cert.IPAddresses) == 0 {
+			violations = append(violations, &models.Violation{
 				RuleID:   "CERT-SAN-001",
 				Standard: "Certificate Policy",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message:  "Subject Alternative Name extension is required",
 			})
 		}
 	}
 
-	// 5️⃣ PQC checks (if enabled)
+	// PQC algorithm checks — skip for standard RSA/ECDSA/Ed* algorithms to
+	// avoid false positives on every normal certificate.
 	if r.Policy.EnablePQCChecks {
 		algoOID := cert.PublicKeyAlgorithmOID.String()
+		if !isClassicalAlgoOID(algoOID) {
+			if len(r.Policy.AllowedPQCOIDs) > 0 {
+				allowed := false
+				for _, oid := range r.Policy.AllowedPQCOIDs {
+					if algoOID == oid {
+						allowed = true
+						break
+					}
+				}
 
-		// Check allowlist
-		if len(r.Policy.AllowedPQCOIDs) > 0 {
-			allowed := false
-			for _, oid := range r.Policy.AllowedPQCOIDs {
-				if algoOID == oid {
-					allowed = true
-					break
+				if !allowed {
+					violations = append(violations, &models.Violation{
+						RuleID:   "RFC5280-PQC-NOT-ALLOWED",
+						Severity: models.SeverityHigh,
+						Message:  "Certificate uses disallowed PQC algorithm OID: " + algoOID,
+						Standard: "RFC5280 / NIST PQC",
+					})
 				}
 			}
-			if !allowed {
-				violations = append(violations, &Violation{
-					RuleID:   "RFC5280-PQC-NOT-ALLOWED",
-					Severity: SeverityHigh,
-					Message:  "Certificate uses disallowed PQC algorithm OID: " + algoOID,
-					Standard: "RFC5280 / NIST PQC",
+			// ML-KEM-512 (Kyber-512) is the lowest NIST PQC security level
+			if algoOID == "2.16.840.1.101.3.4.1.55" && r.Policy.DisallowLowSecurityPQC {
+				violations = append(violations, &models.Violation{
+					RuleID:   "RFC5280-PQC-LOW-SECURITY",
+					Severity: models.SeverityMedium,
+					Message:  "Certificate uses ML-KEM-512 (lower security level)",
+					Standard: "NIST PQC",
 				})
 			}
-		}
-
-		// Example downgrade warning for Kyber-512
-		if algoOID == "2.16.840.1.101.3.4.1.55" && r.Policy.DisallowLowSecurityPQC {
-			violations = append(violations, &Violation{
-				RuleID:   "RFC5280-PQC-LOW-SECURITY",
-				Severity: SeverityMedium,
-				Message:  "Certificate uses ML-KEM-512 (lower security level)",
-				Standard: "NIST PQC",
-			})
 		}
 	}
 
 	return violations
 }
 
-func (r *RuleUniversalCert) ValidateCSR(csr *x509.CertificateRequest, p *Policy) []*Violation {
+func (r *RuleUniversalCert) ValidateCSR(csr *x509.CertificateRequest, p *models.Policy) []*models.Violation {
 	return nil
 }
 
-func (r *RuleUniversalCSR) ValidateCSR(csr *x509.CertificateRequest, p *Policy) []*Violation {
+func (r *RuleUniversalCSR) ValidateCSR(csr *x509.CertificateRequest, p *models.Policy) []*models.Violation {
 	if r.Policy == nil {
 		return nil
 	}
 
-	var violations []*Violation
+	var violations []*models.Violation
 
-	// 1️⃣ Minimum RSA key size
 	if csr.PublicKeyAlgorithm == x509.RSA {
-		key := csr.PublicKey.(*rsa.PublicKey)
-		if key.Size()*8 < r.Policy.MinRSAKeySize {
-			violations = append(violations, &Violation{
-				RuleID:   "CSR-KEY-001",
-				Standard: "Pre-issuance guardrail",
-				Severity: SeverityHigh,
-				Message:  "CSR RSA key size below minimum requirement",
-			})
+		if key, ok := csr.PublicKey.(*rsa.PublicKey); ok {
+			if key.Size()*8 < r.Policy.MinRSAKeySize {
+				violations = append(violations, &models.Violation{
+					RuleID:   "CSR-KEY-001",
+					Standard: "Pre-issuance guardrail",
+					Severity: models.SeverityHigh,
+					Message:  "CSR RSA key size below minimum requirement",
+				})
+			}
 		}
 	}
 
-	// 2️⃣ Allowed signature algorithms
 	if len(r.Policy.AllowedSignatureAlgorithms) > 0 {
-		allowed := false
 		sig := csr.SignatureAlgorithm.String()
-
+		allowed := false
 		for _, a := range r.Policy.AllowedSignatureAlgorithms {
 			if strings.EqualFold(a, sig) {
 				allowed = true
@@ -162,25 +192,21 @@ func (r *RuleUniversalCSR) ValidateCSR(csr *x509.CertificateRequest, p *Policy) 
 		}
 
 		if !allowed {
-			violations = append(violations, &Violation{
+			violations = append(violations, &models.Violation{
 				RuleID:   "CSR-SIG-001",
 				Standard: "Pre-issuance guardrail",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message:  "CSR signature algorithm not allowed by policy",
 			})
 		}
 	}
 
-	// 3️⃣ SAN required (generic)
 	if r.Policy.RequireSAN {
-		if len(csr.DNSNames) == 0 &&
-			len(csr.EmailAddresses) == 0 &&
-			len(csr.IPAddresses) == 0 {
-
-			violations = append(violations, &Violation{
+		if len(csr.DNSNames) == 0 && len(csr.EmailAddresses) == 0 && len(csr.IPAddresses) == 0 {
+			violations = append(violations, &models.Violation{
 				RuleID:   "CSR-SAN-001",
 				Standard: "Pre-issuance guardrail",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message:  "CSR missing Subject Alternative Name extension",
 			})
 		}
@@ -189,25 +215,23 @@ func (r *RuleUniversalCSR) ValidateCSR(csr *x509.CertificateRequest, p *Policy) 
 	return violations
 }
 
-func (r *RuleUniversalCSR) ValidateCert(cert *x509.Certificate, p *Policy) []*Violation {
+func (r *RuleUniversalCSR) ValidateCert(cert *x509.Certificate, p *models.Policy) []*models.Violation {
 	return nil
 }
 
-func (r *RuleTLSServerCert) ValidateCert(cert *x509.Certificate, p *Policy) []*Violation {
+func (r *RuleTLSServerCert) ValidateCert(cert *x509.Certificate, p *models.Policy) []*models.Violation {
 	if r.Policy == nil {
 		return nil
 	}
 
-	var violations []*Violation
-	// 1️⃣ SAN required for TLS
-	if r.Policy.RequireSAN {
-		if len(cert.DNSNames) == 0 &&
-			len(cert.IPAddresses) == 0 {
+	var violations []*models.Violation
 
-			violations = append(violations, &Violation{
+	if r.Policy.RequireSAN {
+		if len(cert.DNSNames) == 0 && len(cert.IPAddresses) == 0 {
+			violations = append(violations, &models.Violation{
 				RuleID:   "TLS-SAN-001",
 				Standard: "CA/B Forum BR 7.1.4.2.1",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message:  "TLS certificate must contain DNS or IP SAN",
 			})
 		}
@@ -216,25 +240,40 @@ func (r *RuleTLSServerCert) ValidateCert(cert *x509.Certificate, p *Policy) []*V
 	return violations
 }
 
-func (r *RuleTLSServerCert) ValidateCSR(csr *x509.CertificateRequest, p *Policy) []*Violation {
+func (r *RuleTLSServerCert) ValidateCSR(csr *x509.CertificateRequest, p *models.Policy) []*models.Violation {
 	if r.Policy == nil {
 		return nil
 	}
 
-	var violations []*Violation
+	var violations []*models.Violation
 
 	if r.Policy.RequireSAN {
-		if len(csr.DNSNames) == 0 &&
-			len(csr.IPAddresses) == 0 {
-
-			violations = append(violations, &Violation{
+		if len(csr.DNSNames) == 0 && len(csr.IPAddresses) == 0 {
+			violations = append(violations, &models.Violation{
 				RuleID:   "TLS-CSR-SAN-001",
 				Standard: "Pre-issuance TLS policy",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message:  "TLS CSR must contain DNS or IP SAN",
 			})
 		}
 	}
 
 	return violations
+}
+
+// isClassicalAlgoOID returns true for standard RSA/ECDSA/EdDSA OIDs.
+// PQC allowlist/denylist checks are skipped for these to avoid false positives.
+func isClassicalAlgoOID(oid string) bool {
+	switch oid {
+	case "1.2.840.113549.1.1.1", // rsaEncryption
+		"1.2.840.10045.2.1",     // id-ecPublicKey
+		"1.3.101.112",           // id-Ed25519
+		"1.3.101.113",           // id-Ed448
+		"1.2.840.113549.1.1.5",  // sha1WithRSAEncryption
+		"1.2.840.113549.1.1.11", // sha256WithRSAEncryption
+		"1.2.840.113549.1.1.12", // sha384WithRSAEncryption
+		"1.2.840.113549.1.1.13": // sha512WithRSAEncryption
+		return true
+	}
+	return false
 }

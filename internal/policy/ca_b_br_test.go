@@ -6,10 +6,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/JahanviAggarwal/TrustPulse/internal/models"
 )
 
-func defaultCertPolicy() *CertificatePolicy {
-	return &CertificatePolicy{
+func defaultCertPolicy() *models.CertificatePolicy {
+	return &models.CertificatePolicy{
 		MinRSAKeySize:              2048,
 		MaxValidityDays:            398,
 		RequireSAN:                 true,
@@ -17,8 +19,8 @@ func defaultCertPolicy() *CertificatePolicy {
 	}
 }
 
-func defaultCSRPolicy() *CSRPolicy {
-	return &CSRPolicy{
+func defaultCSRPolicy() *models.CSRPolicy {
+	return &models.CSRPolicy{
 		MinRSAKeySize:              2048,
 		RequireSAN:                 true,
 		AllowedSignatureAlgorithms: []string{"SHA256-RSA", "ECDSA-SHA256"},
@@ -66,7 +68,7 @@ func TestRuleUniversalCert_Validity_Pass(t *testing.T) {
 func TestRuleUniversalCert_Validity_Fail(t *testing.T) {
 	cert := mustBuildCert(t, &certOpts{
 		keyBits:   2048,
-		validDays: 400, // exceeds 398-day BR limit
+		validDays: 400,
 		dnsNames:  []string{"example.com"},
 	})
 	rule := &RuleUniversalCert{Policy: defaultCertPolicy()}
@@ -114,7 +116,7 @@ func TestRuleUniversalCert_SigAlgo_Fail(t *testing.T) {
 		dnsNames: []string{"example.com"},
 	})
 	p := defaultCertPolicy()
-	p.AllowedSignatureAlgorithms = []string{"ECDSA-SHA256"} // RSA not allowed
+	p.AllowedSignatureAlgorithms = []string{"ECDSA-SHA256"}
 	rule := &RuleUniversalCert{Policy: p}
 	vs := rule.ValidateCert(cert.ZCert, DefaultPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "CERT-SIG-001"),
@@ -135,7 +137,7 @@ func TestRuleTLSServerCert_DNSAN_Pass(t *testing.T) {
 		keyBits:  2048,
 		dnsNames: []string{"secure.example.com"},
 	})
-	rule := &RuleTLSServerCert{Policy: &TLSServerPolicy{RequireSAN: true}}
+	rule := &RuleTLSServerCert{Policy: &models.TLSServerPolicy{RequireSAN: true}}
 	vs := rule.ValidateCert(cert.ZCert, DefaultPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "TLS-SAN-001"),
 		"expected no TLS-SAN-001 when DNS SAN is present")
@@ -146,7 +148,7 @@ func TestRuleTLSServerCert_IPSAN_Pass(t *testing.T) {
 		keyBits:     2048,
 		ipAddresses: []net.IP{net.ParseIP("10.0.0.1")},
 	})
-	rule := &RuleTLSServerCert{Policy: &TLSServerPolicy{RequireSAN: true}}
+	rule := &RuleTLSServerCert{Policy: &models.TLSServerPolicy{RequireSAN: true}}
 	vs := rule.ValidateCert(cert.ZCert, DefaultPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "TLS-SAN-001"),
 		"expected no TLS-SAN-001 when IP SAN is present")
@@ -157,7 +159,7 @@ func TestRuleTLSServerCert_NoSAN_Fail(t *testing.T) {
 		keyBits: 2048,
 		subject: stdpkix.Name{CommonName: "tls.example.com"},
 	})
-	rule := &RuleTLSServerCert{Policy: &TLSServerPolicy{RequireSAN: true}}
+	rule := &RuleTLSServerCert{Policy: &models.TLSServerPolicy{RequireSAN: true}}
 	vs := rule.ValidateCert(cert.ZCert, DefaultPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "TLS-SAN-001"),
 		"expected TLS-SAN-001 for TLS cert with no DNS/IP SAN")
@@ -168,7 +170,7 @@ func TestRuleTLSServerCert_EmailOnlySAN_Fail(t *testing.T) {
 		keyBits:        2048,
 		emailAddresses: []string{"user@example.com"},
 	})
-	rule := &RuleTLSServerCert{Policy: &TLSServerPolicy{RequireSAN: true}}
+	rule := &RuleTLSServerCert{Policy: &models.TLSServerPolicy{RequireSAN: true}}
 	vs := rule.ValidateCert(cert.ZCert, DefaultPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "TLS-SAN-001"),
 		"expected TLS-SAN-001 for cert with email-only SAN (not DNS/IP)")
@@ -178,7 +180,7 @@ func TestRuleTLSServerCert_CSR_NoSAN_Fail(t *testing.T) {
 	csr := mustBuildCSR(t, &csrOpts{
 		subject: stdpkix.Name{CommonName: "tls.example.com"},
 	})
-	rule := &RuleTLSServerCert{Policy: &TLSServerPolicy{RequireSAN: true}}
+	rule := &RuleTLSServerCert{Policy: &models.TLSServerPolicy{RequireSAN: true}}
 	vs := rule.ValidateCSR(csr, DefaultPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "TLS-CSR-SAN-001"),
 		"expected TLS-CSR-SAN-001 for TLS CSR with no DNS/IP SAN")

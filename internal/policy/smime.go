@@ -1,73 +1,67 @@
 package policy
 
 import (
+	"github.com/JahanviAggarwal/TrustPulse/internal/models"
 	zcrypto "github.com/zmap/zcrypto/x509"
 )
 
-// ----------------------------
-// Rule: S/MIME
-// ----------------------------
 type RuleSMIME struct {
-	Policy *SMIMEPolicy
+	Policy *models.SMIMEPolicy
 }
 
-func (r *RuleSMIME) ValidateCert(cert *zcrypto.Certificate, p *Policy) []*Violation {
-	// Skip if not S/MIME or rule is disabled
-	if !IsSMIME(cert) || !r.Policy.Enabled {
-		return nil
-	}
-
+func (r *RuleSMIME) ValidateCert(cert *zcrypto.Certificate, p *models.Policy) []*models.Violation {
 	if r.Policy == nil || !r.Policy.Enabled {
 		return nil
 	}
-	var violations []*Violation
 
-	// 1️⃣ EKU Check
+	if !IsSMIME(cert) {
+		return nil
+	}
+
+	var violations []*models.Violation
+
 	for _, requiredEKU := range r.Policy.RequireEKU {
 		if !HasEKU(cert, requiredEKU) {
-			violations = append(violations, &Violation{
+			violations = append(violations, &models.Violation{
 				RuleID:   "SMIME-EKU-MISSING",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message:  "S/MIME certificate missing required EKU",
 				Standard: "CA/B Forum S/MIME BR",
 			})
 		}
 	}
 
-	// 2️⃣ Email SAN/CN check
 	if r.Policy.RequireEmail && len(cert.EmailAddresses) == 0 {
-		violations = append(violations, &Violation{
+		violations = append(violations, &models.Violation{
 			RuleID:   "SMIME-SAN-MISSING",
-			Severity: SeverityHigh,
+			Severity: models.SeverityHigh,
 			Message:  "S/MIME certificate missing email in SAN or CN",
 			Standard: "CA/B Forum S/MIME BR",
 		})
 	}
 
-	// 3️⃣ DigitalSignature KeyUsage
 	if r.Policy.RequireDigitalSignature {
 		if cert.KeyUsage == 0 {
-			violations = append(violations, &Violation{
+			violations = append(violations, &models.Violation{
 				RuleID:   "SMIME-KEYUSAGE-MISSING",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message:  "S/MIME certificate missing KeyUsage extension entirely",
 				Standard: "CA/B Forum S/MIME BR",
 			})
 		} else if cert.KeyUsage&zcrypto.KeyUsageDigitalSignature == 0 {
-			violations = append(violations, &Violation{
+			violations = append(violations, &models.Violation{
 				RuleID:   "SMIME-KEYUSAGE-INVALID",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message:  "S/MIME certificate missing digitalSignature KeyUsage",
 				Standard: "CA/B Forum S/MIME BR",
 			})
 		}
 	}
 
-	// 4️⃣ Revocation info
 	if r.Policy.RequireRevocation && len(cert.OCSPServer) == 0 && len(cert.CRLDistributionPoints) == 0 {
-		violations = append(violations, &Violation{
+		violations = append(violations, &models.Violation{
 			RuleID:   "SMIME-REVOCATION-MISSING",
-			Severity: SeverityMedium,
+			Severity: models.SeverityMedium,
 			Message:  "S/MIME certificate missing revocation information (OCSP/CRL)",
 			Standard: "CA/B Forum S/MIME BR",
 		})
@@ -76,18 +70,17 @@ func (r *RuleSMIME) ValidateCert(cert *zcrypto.Certificate, p *Policy) []*Violat
 	return violations
 }
 
-func (r *RuleSMIME) ValidateCSR(csr *zcrypto.CertificateRequest, p *Policy) []*Violation {
-	// Pre-issuance: only email check
-	if !r.Policy.Enabled {
+func (r *RuleSMIME) ValidateCSR(csr *zcrypto.CertificateRequest, p *models.Policy) []*models.Violation {
+	if r.Policy == nil || !r.Policy.Enabled {
 		return nil
 	}
 
-	var violations []*Violation
+	var violations []*models.Violation
 
 	if r.Policy.RequireEmail && len(csr.EmailAddresses) == 0 {
-		violations = append(violations, &Violation{
+		violations = append(violations, &models.Violation{
 			RuleID:   "SMIME-SAN-MISSING",
-			Severity: SeverityHigh,
+			Severity: models.SeverityHigh,
 			Message:  "S/MIME CSR missing email in SAN or CN",
 			Standard: "Pre-issuance S/MIME policy",
 		})
@@ -96,15 +89,13 @@ func (r *RuleSMIME) ValidateCSR(csr *zcrypto.CertificateRequest, p *Policy) []*V
 	return violations
 }
 
-// ----------------------------
-// Helpers
-// ----------------------------
 func IsSMIME(cert *zcrypto.Certificate) bool {
 	for _, eku := range cert.ExtKeyUsage {
 		if eku == zcrypto.ExtKeyUsageEmailProtection {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -114,5 +105,6 @@ func HasEKU(cert *zcrypto.Certificate, eku zcrypto.ExtKeyUsage) bool {
 			return true
 		}
 	}
+
 	return false
 }

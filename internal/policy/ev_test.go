@@ -6,6 +6,7 @@ import (
 	stdasn1 "encoding/asn1"
 	"testing"
 
+	"github.com/JahanviAggarwal/TrustPulse/internal/models"
 	"github.com/stretchr/testify/require"
 	zcrypto "github.com/zmap/zcrypto/x509"
 )
@@ -13,8 +14,8 @@ import (
 // evPolicyOID is the CA/B Forum EV TLS policy OID: 2.23.140.1.1
 var evPolicyOID = stdasn1.ObjectIdentifier{2, 23, 140, 1, 1}
 
-func enabledEVPolicy() *EVPolicy {
-	return &EVPolicy{
+func enabledEVPolicy() *models.EVPolicy {
+	return &models.EVPolicy{
 		Enabled: true,
 		RequiredSubjectFields: struct {
 			Organization     bool `yaml:"organization"`
@@ -32,7 +33,7 @@ func enabledEVPolicy() *EVPolicy {
 // evAwarePolicy returns DefaultPolicy with EV checking enabled.
 // The EV rules check p.EV.Enabled from the *Policy argument, not r.Policy,
 // so DefaultPolicy() (EV disabled) silently skips all EV checks.
-func evAwarePolicy() *Policy {
+func evAwarePolicy() *models.Policy {
 	p := DefaultPolicy()
 	p.EV = *enabledEVPolicy()
 	return p
@@ -87,8 +88,8 @@ func TestRuleEV_NonEV_Skipped(t *testing.T) {
 	require.Empty(t, vs, "expected no violations for non-EV cert (no EV policy OID)")
 }
 
-// buildCompliantEVCert satisfies all fields the current ev.go checks:
-// Organization, Country, OrganizationalUnit (businessCategory proxy),
+// buildCompliantEVCert satisfies all EV checks:
+// Organization, Country, businessCategory (OID 2.5.4.15 — not OU),
 // EV policy OID, and serverAuth EKU.
 func buildCompliantEVCert(t *testing.T) *builtCert {
 	t.Helper()
@@ -96,9 +97,12 @@ func buildCompliantEVCert(t *testing.T) *builtCert {
 		keyBits:  2048,
 		dnsNames: []string{"ev.example.com"},
 		subject: stdpkix.Name{
-			Organization:       []string{"ACME Corporation"},
-			Country:            []string{"US"},
-			OrganizationalUnit: []string{"Private Organization"},
+			Organization: []string{"ACME Corporation"},
+			Country:      []string{"US"},
+		},
+		// businessCategory must be OID 2.5.4.15, not OrganizationalUnit (2.5.4.11)
+		extraSubjectAttrs: []stdpkix.AttributeTypeAndValue{
+			{Type: stdasn1.ObjectIdentifier{2, 5, 4, 15}, Value: "Private Organization"},
 		},
 		policyOIDs:   []stdasn1.ObjectIdentifier{evPolicyOID},
 		extKeyUsages: []stdx509.ExtKeyUsage{stdx509.ExtKeyUsageServerAuth},
@@ -148,8 +152,9 @@ func TestRuleEV_CountryMissing_Fail(t *testing.T) {
 		"expected EV-COUNTRY-MISSING for EV cert without Country")
 }
 
-// TestRuleEV_BusinessCategoryMissing_Fail: ev.go uses OrganizationalUnit as
-// the businessCategory stand-in in the current implementation.
+// TestRuleEV_BusinessCategoryMissing_Fail: cert must have OID 2.5.4.15
+// (businessCategory) in its Subject — having an OrganizationalUnit field
+// is not sufficient and must not suppress the violation.
 func TestRuleEV_BusinessCategoryMissing_Fail(t *testing.T) {
 	cert := mustBuildCert(t, &certOpts{
 		keyBits:  2048,
@@ -157,7 +162,7 @@ func TestRuleEV_BusinessCategoryMissing_Fail(t *testing.T) {
 		subject: stdpkix.Name{
 			Organization: []string{"ACME Corporation"},
 			Country:      []string{"US"},
-			// No OrganizationalUnit → businessCategory check fails
+			// No businessCategory OID 2.5.4.15 → violation expected
 		},
 		policyOIDs:   []stdasn1.ObjectIdentifier{evPolicyOID},
 		extKeyUsages: []stdx509.ExtKeyUsage{stdx509.ExtKeyUsageServerAuth},
@@ -165,7 +170,7 @@ func TestRuleEV_BusinessCategoryMissing_Fail(t *testing.T) {
 	rule := &RuleEV{Policy: enabledEVPolicy()}
 	vs := rule.ValidateCert(cert.ZCert, evAwarePolicy())
 	require.True(t, ptrViolationsHaveID(vs, "EV-BUSINESS-CATEGORY-MISSING"),
-		"expected EV-BUSINESS-CATEGORY-MISSING for EV cert without OU (businessCategory proxy)")
+		"expected EV-BUSINESS-CATEGORY-MISSING for EV cert without businessCategory OID 2.5.4.15")
 }
 
 func TestRuleEV_EKUMissing_Fail(t *testing.T) {
@@ -217,10 +222,13 @@ func TestRuleEV_CSR_BusinessCategoryMissing_Fail(t *testing.T) {
 func TestRuleEV_CSR_AllPass(t *testing.T) {
 	csr := mustBuildCSR(t, &csrOpts{
 		keyBits: 2048,
+		// businessCategory (OID 2.5.4.15) via ExtraNames — not OrganizationalUnit
 		subject: stdpkix.Name{
-			Organization:       []string{"ACME Corporation"},
-			Country:            []string{"US"},
-			OrganizationalUnit: []string{"Private Organization"},
+			Organization: []string{"ACME Corporation"},
+			Country:      []string{"US"},
+			ExtraNames: []stdpkix.AttributeTypeAndValue{
+				{Type: stdasn1.ObjectIdentifier{2, 5, 4, 15}, Value: "Private Organization"},
+			},
 		},
 	})
 	rule := &RuleEV{Policy: enabledEVPolicy()}

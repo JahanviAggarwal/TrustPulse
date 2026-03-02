@@ -1,0 +1,13 @@
+# Build output
+bin/
+
+# Test coverage artefacts
+coverage.out
+coverage.html
+
+# Editor and OS artefacts
+*.swp
+*.swo
+.DS_Store
+.idea/
+.vscode/

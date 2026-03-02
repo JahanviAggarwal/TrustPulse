@@ -1,0 +1,73 @@
+version: "1.0"
+
+# zlint — runs the full zmap/zlint BR lint suite on certificates.
+# Set enabled: false to skip it (useful for internal or dev certs).
+zlint:
+  enabled: true
+  # Uncomment to remap individual lint result severities.
+  # Keys are the raw lint name (without the "ZLINT-" prefix).
+  # severity_overrides:
+  #   e_sub_cert_cert_policy_empty: "MEDIUM"
+  #   w_ext_subject_key_identifier_missing_sub_cert: "LOW"
+
+# Pre-issuance CSR checks
+csr:
+  min_rsa_key_size: 2048
+  allowed_signature_algorithms:
+    - SHA256-RSA
+    - ECDSA-SHA256
+  require_san: true
+
+# Universal certificate checks
+certificate:
+  min_rsa_key_size: 2048
+  max_validity_days: 398         # CA/B Forum BR 7.1.4.2.1
+  allowed_signature_algorithms:
+    - SHA256-RSA
+    - ECDSA-SHA256
+  require_san: true
+
+  # Post-Quantum Cryptography
+  enable_pqc_checks: true
+  allowed_pqc_oids:
+    - "2.16.840.1.101.3.4.1.56"  # ML-KEM-768
+    - "2.16.840.1.101.3.4.1.57"  # ML-KEM-1024
+  disallow_low_security_pqc: true  # Blocks ML-KEM-512
+
+# Enforcement behaviour
+enforcement:
+  mode: "audit"          # audit | preissuance
+  fail_on: ["HIGH"]      # Severity levels that trigger exit 1 in preissuance mode
+
+# Extended Validation
+ev:
+  enabled: true
+  required_subject_fields:
+    organization: true
+    country: true
+    business_category: true
+  required_ekus:
+    - 1  # serverAuth
+
+# S/MIME Baseline Requirements
+smime:
+  enabled: true
+  require_eku:
+    - 4  # emailProtection
+  require_email: true
+  require_revocation: true
+  require_digital_signature: true
+
+# TLS Server profile
+tls_server:
+  require_san: true
+
+# Root CA policy
+root:
+  enabled: true
+  min_rsa_key_size: 4096
+  require_self_signed: true
+  require_key_usage_cert_sign: true
+  allowed_signature_algorithms:
+    - SHA256-RSA
+    - ECDSA-SHA256
