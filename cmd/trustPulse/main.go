@@ -64,9 +64,7 @@ func main() {
 			os.Exit(1)
 		}
 		if format == "text" {
-			fmt.Println("✅ Policy loaded successfully:")
-			fmt.Printf("%+v\n", p.SMIME)
-		}
+			fmt.Println("✅ Policy loaded successfully:")		}
 	} else {
 		p = policy.DefaultPolicy()
 	}

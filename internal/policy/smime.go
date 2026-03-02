@@ -1,8 +1,6 @@
 package policy
 
 import (
-	"fmt"
-
 	zcrypto "github.com/zmap/zcrypto/x509"
 )
 
@@ -14,7 +12,6 @@ type RuleSMIME struct {
 }
 
 func (r *RuleSMIME) ValidateCert(cert *zcrypto.Certificate, p *Policy) []*Violation {
-	fmt.Println("Validating S/MIME certificate with policy:", r.Policy)
 	// Skip if not S/MIME or rule is disabled
 	if !IsSMIME(cert) || !r.Policy.Enabled {
 		return nil
