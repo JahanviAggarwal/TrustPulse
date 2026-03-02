@@ -32,7 +32,7 @@ jobs:
       - name: Enforce Minimum Coverage (60%)
         run: |
           total=$(go tool cover -func=coverage/coverage.out | grep total | awk '{print $3}' | sed 's/%//')
-          threshold=60
+          threshold=70
           echo "Total coverage: $total%"
           result=$(echo "$total >= $threshold" | bc)
           if [ "$result" -eq 1 ]; then
