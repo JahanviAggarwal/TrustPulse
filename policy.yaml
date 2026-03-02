@@ -1,27 +1,10 @@
 version: "1.0"
 
-# zlint — runs the full zmap/zlint BR lint suite on certificates.
-# Set enabled: false to skip it (useful for internal or dev certs).
-zlint:
-  enabled: true
-  # Uncomment to remap individual lint result severities.
-  # Keys are the raw lint name (without the "ZLINT-" prefix).
-  # severity_overrides:
-  #   e_sub_cert_cert_policy_empty: "MEDIUM"
-  #   w_ext_subject_key_identifier_missing_sub_cert: "LOW"
-
-# Pre-issuance CSR checks
-csr:
-  min_rsa_key_size: 2048
-  allowed_signature_algorithms:
-    - SHA256-RSA
-    - ECDSA-SHA256
-  require_san: true
-
 # Universal certificate checks
 certificate:
-  min_rsa_key_size: 2048
-  max_validity_days: 398         # CA/B Forum BR 7.1.4.2.1
+  min_rsa_key_size: 2048         # Minimum RSA key size in bits (BR §7.1.4.2.1)
+  min_ecdsa_curve_bits: 256      # Reject P-192 / P-224 curves; 0 = disabled
+  max_validity_days: 398         # CA/B Forum BR maximum (398 days)
   allowed_signature_algorithms:
     - SHA256-RSA
     - ECDSA-SHA256
@@ -32,7 +15,16 @@ certificate:
   allowed_pqc_oids:
     - "2.16.840.1.101.3.4.1.56"  # ML-KEM-768
     - "2.16.840.1.101.3.4.1.57"  # ML-KEM-1024
-  disallow_low_security_pqc: true  # Blocks ML-KEM-512
+  disallow_low_security_pqc: true # Blocks ML-KEM-512 (OID .55)
+
+# Pre-issuance CSR checks
+csr:
+  min_rsa_key_size: 2048
+  min_ecdsa_curve_bits: 256      # Reject weak ECDSA curves in CSRs; 0 = disabled
+  allowed_signature_algorithms:
+    - SHA256-RSA
+    - ECDSA-SHA256
+  require_san: true
 
 # Enforcement behaviour
 enforcement:
@@ -66,8 +58,16 @@ tls_server:
 root:
   enabled: true
   min_rsa_key_size: 4096
+  min_ecdsa_curve_bits: 384      # Require P-384 or stronger for root CA ECDSA keys; 0 = disabled
   require_self_signed: true
   require_key_usage_cert_sign: true
-  allowed_signature_algorithms:
-    - SHA256-RSA
-    - ECDSA-SHA256
+
+# zlint BR lint suite
+zlint:
+  enabled: true
+  # Reclassify individual lint results (Error→HIGH / Warn→MEDIUM by default).
+  # Keys are raw lint names; values are HIGH, MEDIUM, or LOW.
+  severity_overrides: {}
+  # Example:
+  #   e_sub_cert_cert_policy_empty: "MEDIUM"
+  #   w_ext_subject_key_identifier_missing_sub_cert: "LOW"

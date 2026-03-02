@@ -4,6 +4,7 @@ on:
   push:
     branches: [ main ]
   pull_request:
+    branches: [ main ]
 
 jobs:
   test:
@@ -17,9 +18,18 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.25.1'
+          cache: true
 
       - name: Verify dependencies
-        run: go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
 
       - name: Run Tests with Coverage
         run: |
@@ -29,7 +39,7 @@ jobs:
       - name: Display Coverage
         run: go tool cover -func=coverage/coverage.out
 
-      - name: Enforce Minimum Coverage (60%)
+      - name: Enforce Minimum Coverage (70%)
         run: |
           total=$(go tool cover -func=coverage/coverage.out | grep total | awk '{print $3}' | sed 's/%//')
           threshold=70
@@ -46,4 +56,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: coverage.out
+          path: coverage/coverage.out

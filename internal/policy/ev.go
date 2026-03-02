@@ -10,6 +10,9 @@ import (
 // as required by the CA/B Forum EV Guidelines Section 9.2.4.
 // This is distinct from organizationalUnitName (2.5.4.11) — checking OU
 // instead of businessCategory is a common but semantically incorrect shortcut.
+//
+// ObjectIdentifier is []int in both standard and zcrypto asn1 packages, so
+// a plain slice literal is safe for direct comparison.
 var oidBusinessCategory = []int{2, 5, 4, 15}
 
 // hasBusinessCategory reports whether the given attribute list contains a
@@ -37,6 +40,9 @@ func oidEqual(a, b []int) bool {
 	return true
 }
 
+// ------------------------
+// EV Rule Engine (Policy-driven)
+// ------------------------
 type RuleEV struct {
 	Policy *models.EVPolicy
 }
@@ -52,6 +58,7 @@ func (r *RuleEV) ValidateCert(cert *zcrypto.Certificate, p *models.Policy) []*mo
 
 	var violations []*models.Violation
 
+	// Check required subject fields
 	if p.EV.RequiredSubjectFields.Organization && len(cert.Subject.Organization) == 0 {
 		violations = append(violations, &models.Violation{
 			RuleID:   "EV-ORG-MISSING",
@@ -62,6 +69,8 @@ func (r *RuleEV) ValidateCert(cert *zcrypto.Certificate, p *models.Policy) []*mo
 	}
 
 	// businessCategory is OID 2.5.4.15 — distinct from OU (2.5.4.11).
+	// Walk Subject.Names to find the actual attribute rather than using
+	// OrganizationalUnit which is a different field entirely.
 	if p.EV.RequiredSubjectFields.BusinessCategory && !hasBusinessCategory(cert.Subject.Names) {
 		violations = append(violations, &models.Violation{
 			RuleID:   "EV-BUSINESS-CATEGORY-MISSING",
@@ -80,6 +89,7 @@ func (r *RuleEV) ValidateCert(cert *zcrypto.Certificate, p *models.Policy) []*mo
 		})
 	}
 
+	// Check required EKUs
 	for _, requiredEKU := range p.EV.RequiredEKUs {
 		found := false
 		for _, eku := range cert.ExtKeyUsage {
@@ -92,7 +102,7 @@ func (r *RuleEV) ValidateCert(cert *zcrypto.Certificate, p *models.Policy) []*mo
 			violations = append(violations, &models.Violation{
 				RuleID:   "EV-EKU-MISSING",
 				Severity: models.SeverityHigh,
-				Message:  "EV certificate missing required EKU: " + EKUToString(requiredEKU),
+				Message:  "EV certificate missing required EKU: " + ekuToString(requiredEKU),
 				Standard: "CA/B Forum EV Guidelines",
 			})
 		}
@@ -101,7 +111,7 @@ func (r *RuleEV) ValidateCert(cert *zcrypto.Certificate, p *models.Policy) []*mo
 	return violations
 }
 
-func EKUToString(eku zcrypto.ExtKeyUsage) string {
+func ekuToString(eku zcrypto.ExtKeyUsage) string {
 	switch eku {
 	case zcrypto.ExtKeyUsageServerAuth:
 		return "serverAuth"
@@ -123,6 +133,7 @@ func (r *RuleEV) ValidateCSR(csr *zcrypto.CertificateRequest, p *models.Policy) 
 		return nil
 	}
 
+	// EV CSR checks: only subject fields (cannot reliably check EKU)
 	var violations []*models.Violation
 
 	if p.EV.RequiredSubjectFields.Organization && len(csr.Subject.Organization) == 0 {
@@ -134,6 +145,7 @@ func (r *RuleEV) ValidateCSR(csr *zcrypto.CertificateRequest, p *models.Policy) 
 		})
 	}
 
+	// businessCategory is OID 2.5.4.15 — same check as for the cert path.
 	if p.EV.RequiredSubjectFields.BusinessCategory && !hasBusinessCategory(csr.Subject.Names) {
 		violations = append(violations, &models.Violation{
 			RuleID:   "EV-BUSINESS-CATEGORY-MISSING",
@@ -155,6 +167,9 @@ func (r *RuleEV) ValidateCSR(csr *zcrypto.CertificateRequest, p *models.Policy) 
 	return violations
 }
 
+// ------------------------
+// Helper: Is EV Certificate
+// ------------------------
 func IsEV(cert *zcrypto.Certificate) bool {
 	for _, p := range cert.PolicyIdentifiers {
 		if len(p) >= 5 &&

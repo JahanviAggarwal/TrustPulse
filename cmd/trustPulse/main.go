@@ -1,104 +1,110 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/JahanviAggarwal/TrustPulse/internal/models"
 	"github.com/JahanviAggarwal/TrustPulse/internal/policy"
 	"github.com/JahanviAggarwal/TrustPulse/internal/validator"
 )
 
+// version is overridden at build time via -ldflags "-X main.version=<tag>".
+var version = "dev"
+
 func main() {
-	mode := "audit"
-	format := "json"
-	filePath := ""
-	policyPath := ""
-
-	for i := 1; i < len(os.Args); i++ {
-		arg := os.Args[i]
-		switch {
-		case arg == "--mode" && i+1 < len(os.Args):
-			mode = os.Args[i+1]
-			i++
-
-		case strings.HasPrefix(arg, "--mode="):
-			mode = strings.SplitN(arg, "=", 2)[1]
-
-		case arg == "--policy" && i+1 < len(os.Args):
-			policyPath = os.Args[i+1]
-			i++
-
-		case strings.HasPrefix(arg, "--policy="):
-			policyPath = strings.SplitN(arg, "=", 2)[1]
-
-		case arg == "--format" && i+1 < len(os.Args):
-			format = os.Args[i+1]
-			i++
-
-		case strings.HasPrefix(arg, "--format="):
-			format = strings.SplitN(arg, "=", 2)[1]
-
-		case !strings.HasPrefix(arg, "-") && filePath == "":
-			filePath = arg
-		}
-	}
-
-	if filePath == "" {
-		fmt.Println("Usage: trustpulse [--mode=audit|preissuance] [--policy=policy.yml] [--format=json|text] <file>")
-		os.Exit(2)
-	}
-
-	if format != "json" && format != "text" {
-		fmt.Fprintf(os.Stderr, "unknown format %q — use 'json' or 'text'\n", format)
-		os.Exit(2)
-	}
-
-	var (
-		p   *models.Policy
-		err error
+	// Exit codes: 0=pass, 1=policy violation, 2=input/usage error, 3=system error
+	const (
+		exitOK          = 0
+		exitPolicyFail  = 1
+		exitInputError  = 2
+		exitSystemError = 3
 	)
+
+	modeFlag := flag.String("mode", "", "audit (default) or preissuance — exit 1 on violations matching fail_on")
+	policyFlag := flag.String("policy", "", "path to YAML policy file (built-in defaults if omitted)")
+	formatFlag := flag.String("format", "json", "output format: json (default) or text")
+	versionFlag := flag.Bool("version", false, "print version and exit")
+	flag.Parse()
+
+	if *versionFlag {
+		fmt.Printf("trustpulse %s\n", version)
+		os.Exit(exitOK)
+	}
+
+	format := *formatFlag
+	if format != "json" && format != "text" {
+		fmt.Fprintf(os.Stderr, "unknown format %q — must be 'json' or 'text'\n", format)
+		os.Exit(exitInputError)
+	}
+
+	args := flag.Args()
+	if len(args) == 0 {
+		fmt.Fprintf(os.Stderr, "Usage: trustpulse [--mode=audit|preissuance] [--policy=policy.yaml] [--format=json|text] <file>\n")
+		os.Exit(exitInputError)
+	}
+	filePath := args[0]
+	policyPath := *policyFlag
+
+	var p *models.Policy
+	var err error
 
 	if policyPath != "" {
 		p, err = policy.LoadPolicy(policyPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to load policy: %v\n", err)
-			os.Exit(1)
+			os.Exit(exitSystemError)
+		}
+		if format == "text" {
+			fmt.Printf("Policy loaded: %s\n", policyPath)
 		}
 	} else {
 		p = policy.DefaultPolicy()
 	}
 
+	// Determine effective run mode: CLI flag wins; fall back to policy file; then "audit".
+	mode := *modeFlag
+	if mode == "" {
+		mode = p.Enforcement.Mode
+	}
+	if mode == "" {
+		mode = "audit"
+	}
+
 	if format == "text" {
-		fmt.Printf("TrustPulse — auditing %s (mode=%s)\n", filePath, mode)
+		fmt.Printf("Starting PKI Compliance Audit for: %s (mode=%s)\n", filePath, mode)
 	}
 
 	report, err := validator.RunAudit(filePath, p)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		os.Exit(exitSystemError)
 	}
 
+	// ─── Output ──────
 	switch format {
 	case "text":
+		fmt.Println("\n--- AUDIT REPORT ---")
 		fmt.Println(report.String())
 
-	default:
+	default: // "json"
 		out, err := report.JSON(p, mode)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to serialize report: %v\n", err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "failed to serialise report: %v\n", err)
+			os.Exit(exitSystemError)
 		}
-
 		fmt.Println(out)
 	}
 
 	if report.ShouldFail(p, mode) {
 		if format == "text" {
-			fmt.Fprintln(os.Stderr, "policy enforcement triggered — exiting non-zero")
+			fmt.Println("Policy enforcement triggered. Blocking execution.")
 		}
+		os.Exit(exitPolicyFail)
+	}
 
-		os.Exit(1)
+	if format == "text" {
+		fmt.Println("\nResult: Audit complete.")
 	}
 }

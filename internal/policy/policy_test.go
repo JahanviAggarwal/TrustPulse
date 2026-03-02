@@ -4,9 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/JahanviAggarwal/TrustPulse/internal/models"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoadPolicy(t *testing.T) {
@@ -74,19 +73,7 @@ zlint:
 	require.Equal(t, models.Severity("LOW"), p.ZLint.SeverityOverrides["w_ext_subject_key_identifier_missing_sub_cert"])
 }
 
-func TestLoadPolicy_zlintDisabled(t *testing.T) {
-	yaml := `
-version: "1.0"
-zlint:
-  enabled: false
-`
-	f, err := os.CreateTemp(t.TempDir(), "policy-zlint-off-*.yml")
-	require.NoError(t, err)
-	_, err = f.WriteString(yaml)
-	require.NoError(t, err)
-	require.NoError(t, f.Close())
-
-	p, err := LoadPolicy(f.Name())
-	require.NoError(t, err)
-	require.False(t, p.ZLint.Enabled)
+func TestDefaultPolicy_zlintEnabled(t *testing.T) {
+	p := DefaultPolicy()
+	require.True(t, p.ZLint.Enabled, "zlint should be enabled in the default policy")
 }

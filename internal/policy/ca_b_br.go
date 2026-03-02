@@ -55,7 +55,6 @@ func (r *RuleUniversalCert) ValidateCert(cert *x509.Certificate, p *models.Polic
 		case *ecdsa.PublicKey:
 			curveBits = pub.Params().BitSize
 			curveName = pub.Params().Name
-
 		case *x509.AugmentedECDSA:
 			curveBits = pub.Pub.Params().BitSize
 			curveName = pub.Pub.Params().Name
@@ -132,7 +131,6 @@ func (r *RuleUniversalCert) ValidateCert(cert *x509.Certificate, p *models.Polic
 						break
 					}
 				}
-
 				if !allowed {
 					violations = append(violations, &models.Violation{
 						RuleID:   "RFC5280-PQC-NOT-ALLOWED",
@@ -181,6 +179,37 @@ func (r *RuleUniversalCSR) ValidateCSR(csr *x509.CertificateRequest, p *models.P
 		}
 	}
 
+	// ECDSA minimum curve strength for CSR pre-issuance.
+	// Mirrors the cert-side check in RuleUniversalCert.
+	if r.Policy.MinECDSACurveBits > 0 && csr.PublicKeyAlgorithm == x509.ECDSA {
+		var (
+			curveBits int
+			curveName string
+		)
+
+		switch pub := csr.PublicKey.(type) {
+		case *ecdsa.PublicKey:
+			curveBits = pub.Params().BitSize
+			curveName = pub.Params().Name
+
+		case *x509.AugmentedECDSA:
+			curveBits = pub.Pub.Params().BitSize
+			curveName = pub.Pub.Params().Name
+		}
+
+		if curveBits > 0 && curveBits < r.Policy.MinECDSACurveBits {
+			violations = append(violations, &models.Violation{
+				RuleID:   "CSR-ECDSA-CURVE-001",
+				Standard: "Pre-issuance guardrail",
+				Severity: models.SeverityHigh,
+				Message: fmt.Sprintf(
+					"CSR ECDSA curve %s (%d bits) is below policy minimum of %d bits",
+					curveName, curveBits, r.Policy.MinECDSACurveBits,
+				),
+			})
+		}
+	}
+
 	if len(r.Policy.AllowedSignatureAlgorithms) > 0 {
 		sig := csr.SignatureAlgorithm.String()
 		allowed := false
@@ -190,7 +219,6 @@ func (r *RuleUniversalCSR) ValidateCSR(csr *x509.CertificateRequest, p *models.P
 				break
 			}
 		}
-
 		if !allowed {
 			violations = append(violations, &models.Violation{
 				RuleID:   "CSR-SIG-001",
@@ -273,7 +301,9 @@ func isClassicalAlgoOID(oid string) bool {
 		"1.2.840.113549.1.1.11", // sha256WithRSAEncryption
 		"1.2.840.113549.1.1.12", // sha384WithRSAEncryption
 		"1.2.840.113549.1.1.13": // sha512WithRSAEncryption
+
 		return true
 	}
+
 	return false
 }

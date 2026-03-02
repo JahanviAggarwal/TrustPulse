@@ -11,14 +11,15 @@
 | Category | Details |
 |---|---|
 | **CA/B Forum Baseline Requirements** | TLS SAN enforcement, max 398-day validity, minimum RSA key size (BR §7.1.4.2.1) |
+| **ECDSA curve enforcement** | Minimum ECDSA curve bit-strength for certificates, CSRs, and Root CAs (rejects P-192/P-224) |
 | **EV Guidelines** | Organization, Country, BusinessCategory subject fields; required EKUs |
 | **S/MIME Baseline Requirements** | EKU, email SAN, digitalSignature KeyUsage, OCSP/CRL revocation info |
-| **Root Program Policies** | Self-signed enforcement, keyCertSign KeyUsage, minimum key size |
+| **Root Program Policies** | Self-signed enforcement, keyCertSign KeyUsage, minimum RSA/ECDSA key size |
 | **RFC 5280** | CA KeyUsage (§4.2.1.3), SAN extension requirements |
 | **Post-Quantum Cryptography (PQC)** | OID allowlist/denylist for NIST PQC algorithms (ML-KEM/Kyber) |
-| **zlint integration** | Runs the full [zmap/zlint](https://github.com/zmap/zlint) lint suite on every certificate |
+| **zlint integration** | Configurable — enable/disable and reclassify individual lint severities via policy YAML |
 | **ASN.1 URI SAN extraction** | Manually parses `GeneralName` sequences to extract URI SANs from CSRs |
-| **Pre-issuance enforcement** | `--mode=preissuance` exits non-zero on policy violations — a drop-in CI/CD gate |
+| **Pre-issuance enforcement** | `--mode=preissuance` exits **1** (policy violation), **2** (input error), or **3** (system error) — a drop-in CI/CD gate |
 | **Policy-as-code** | All rules driven by a human-readable YAML policy file |
 | **JSON & text output** | Machine-readable JSON (default) or human-readable text via `--format=text` |
 
