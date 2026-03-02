@@ -152,16 +152,6 @@ func mustBuildCSR(t *testing.T, opts *csrOpts) *zcrypto.CertificateRequest {
 	return zCSR
 }
 
-// hasViolationID reports whether the flat Violation slice contains ruleID.
-func hasViolationID(vs []Violation, ruleID string) bool {
-	for _, v := range vs {
-		if v.RuleID == ruleID {
-			return true
-		}
-	}
-	return false
-}
-
 // ptrViolationsHaveID reports whether a []*Violation slice contains ruleID.
 func ptrViolationsHaveID(vs []*Violation, ruleID string) bool {
 	for _, v := range vs {

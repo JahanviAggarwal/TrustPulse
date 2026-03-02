@@ -49,22 +49,21 @@ func main() {
 	}
 
 	if format != "json" && format != "text" {
-		fmt.Fprintf(os.Stderr, "❌ Unknown format %q — must be 'json' or 'text'\n", format)
+		fmt.Fprintf(os.Stderr, "Unknown format %q — must be 'json' or 'text'\n", format)
 		os.Exit(2)
 	}
 
-	// 🔐 Load Policy
 	var p *policy.Policy
 	var err error
 
 	if policyPath != "" {
 		p, err = policy.LoadPolicy(policyPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Failed to load policy: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Failed to load policy: %v\n", err)
 			os.Exit(1)
 		}
 		if format == "text" {
-			fmt.Println("✅ Policy loaded successfully:")		}
+			fmt.Println("Policy loaded successfully:")		}
 	} else {
 		p = policy.DefaultPolicy()
 	}
@@ -75,7 +74,7 @@ func main() {
 
 	report, err := validator.RunAudit(filePath, p)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ SYSTEM ERROR: %v\n", err)
+		fmt.Fprintf(os.Stderr, "SYSTEM ERROR: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -88,16 +87,15 @@ func main() {
 	default: // "json"
 		out, err := report.JSON(p, mode)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Failed to serialise report: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Failed to serialise report: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Println(out)
 	}
 
-	// 🔥 Policy-driven enforcement (applies regardless of output format)
 	if report.ShouldFail(p, mode) {
 		if format == "text" {
-			fmt.Println("❌ Policy enforcement triggered. Blocking execution.")
+			fmt.Println("Policy enforcement triggered. Blocking execution.")
 		}
 		os.Exit(1)
 	}

@@ -50,9 +50,16 @@ func RunAudit(filePath string, p *policy.Policy) (*policy.Report, error) {
 		for name, res := range zlintResult.Results {
 			if res.Status == zlintRes.Error || res.Status == zlintRes.Warn {
 
+				// Default severity mapping: Error → HIGH, Warn → MEDIUM.
+				// Operators can override individual lint names via the policy's
+				// ZLintSeverityOverrides map.
 				severity := policy.SeverityMedium
 				if res.Status == zlintRes.Error {
 					severity = policy.SeverityHigh
+				}
+
+				if override, ok := p.ZLintSeverityOverrides[name]; ok {
+					severity = override
 				}
 
 				violations = append(violations, policy.Violation{
@@ -97,4 +104,5 @@ func RunAudit(filePath string, p *policy.Policy) (*policy.Report, error) {
 	return &policy.Report{
 		Violations: violations,
 		Details:    details,
-	}, nil}
+	}, nil
+}

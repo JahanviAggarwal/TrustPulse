@@ -12,12 +12,11 @@ type RuleSMIME struct {
 }
 
 func (r *RuleSMIME) ValidateCert(cert *zcrypto.Certificate, p *Policy) []*Violation {
-	// Skip if not S/MIME or rule is disabled
-	if !IsSMIME(cert) || !r.Policy.Enabled {
+	// Guard nil policy before any field access, then skip non-S/MIME certs
+	if r.Policy == nil || !r.Policy.Enabled {
 		return nil
 	}
-
-	if r.Policy == nil || !r.Policy.Enabled {
+	if !IsSMIME(cert) {
 		return nil
 	}
 	var violations []*Violation
@@ -77,8 +76,8 @@ func (r *RuleSMIME) ValidateCert(cert *zcrypto.Certificate, p *Policy) []*Violat
 }
 
 func (r *RuleSMIME) ValidateCSR(csr *zcrypto.CertificateRequest, p *Policy) []*Violation {
-	// Pre-issuance: only email check
-	if !r.Policy.Enabled {
+	// Pre-issuance: guard nil policy first, then check enabled flag
+	if r.Policy == nil || !r.Policy.Enabled {
 		return nil
 	}
 

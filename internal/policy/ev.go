@@ -1,13 +1,49 @@
 package policy
+
 import (
 	zcrypto "github.com/zmap/zcrypto/x509"
+	zcryptopkix "github.com/zmap/zcrypto/x509/pkix"
 )
+
+// oidBusinessCategory is the X.500 attribute OID for businessCategory (2.5.4.15),
+// as required by the CA/B Forum EV Guidelines Section 9.2.4.
+// This is distinct from organizationalUnitName (2.5.4.11) — checking OU
+// instead of businessCategory is a common but semantically incorrect shortcut.
+//
+// ObjectIdentifier is []int in both standard and zcrypto asn1 packages, so
+// a plain slice literal is safe for direct comparison.
+var oidBusinessCategory = []int{2, 5, 4, 15}
+
+// hasBusinessCategory reports whether the given attribute list contains a
+// businessCategory value (OID 2.5.4.15). It walks the raw Names slice rather
+// than the named fields on pkix.Name, which does not expose businessCategory.
+func hasBusinessCategory(names []zcryptopkix.AttributeTypeAndValue) bool {
+	for _, attr := range names {
+		if oidEqual(attr.Type, oidBusinessCategory) {
+			return true
+		}
+	}
+	return false
+}
+
+// oidEqual compares an asn1.ObjectIdentifier ([]int) against a plain []int.
+func oidEqual(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
 
 // ------------------------
 // EV Rule Engine (Policy-driven)
 // ------------------------
-type RuleEV struct{
-		Policy *EVPolicy
+type RuleEV struct {
+	Policy *EVPolicy
 }
 
 func (r *RuleEV) ValidateCert(cert *zcrypto.Certificate, p *Policy) []*Violation {
@@ -31,15 +67,17 @@ func (r *RuleEV) ValidateCert(cert *zcrypto.Certificate, p *Policy) []*Violation
 		})
 	}
 
-	if p.EV.RequiredSubjectFields.BusinessCategory && len(cert.Subject.OrganizationalUnit) == 0 {
+	// businessCategory is OID 2.5.4.15 — distinct from OU (2.5.4.11).
+	// Walk Subject.Names to find the actual attribute rather than using
+	// OrganizationalUnit which is a different field entirely.
+	if p.EV.RequiredSubjectFields.BusinessCategory && !hasBusinessCategory(cert.Subject.Names) {
 		violations = append(violations, &Violation{
 			RuleID:   "EV-BUSINESS-CATEGORY-MISSING",
 			Severity: SeverityMedium,
-			Message:  "EV certificate missing business category information",
+			Message:  "EV certificate missing businessCategory field (OID 2.5.4.15)",
 			Standard: "CA/B Forum EV Guidelines",
 		})
 	}
-	
 
 	if p.EV.RequiredSubjectFields.Country && len(cert.Subject.Country) == 0 {
 		violations = append(violations, &Violation{
@@ -106,15 +144,15 @@ func (r *RuleEV) ValidateCSR(csr *zcrypto.CertificateRequest, p *Policy) []*Viol
 		})
 	}
 
-	if p.EV.RequiredSubjectFields.BusinessCategory && len(csr.Subject.OrganizationalUnit) == 0 {
+	// businessCategory is OID 2.5.4.15 — same check as for the cert path.
+	if p.EV.RequiredSubjectFields.BusinessCategory && !hasBusinessCategory(csr.Subject.Names) {
 		violations = append(violations, &Violation{
 			RuleID:   "EV-BUSINESS-CATEGORY-MISSING",
 			Severity: SeverityMedium,
-			Message:  "EV CSR missing business category information",
+			Message:  "EV CSR missing businessCategory field (OID 2.5.4.15)",
 			Standard: "CA/B Forum EV Guidelines",
 		})
 	}
-	
 
 	if p.EV.RequiredSubjectFields.Country && len(csr.Subject.Country) == 0 {
 		violations = append(violations, &Violation{

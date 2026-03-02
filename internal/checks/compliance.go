@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/zmap/zcrypto/encoding/asn1"
@@ -36,12 +37,16 @@ func GetCertificateDetails(cert *x509.Certificate) string {
 	)
 
 	// 2. Key Type & Key Size (derive from PublicKey)
+	// Note: zcrypto wraps ECDSA public keys in *x509.AugmentedECDSA; we
+	// handle both the wrapped and bare forms.
 	keySize := ""
 	switch pub := cert.PublicKey.(type) {
 	case *rsa.PublicKey:
 		keySize = fmt.Sprintf("Key Type: RSA, Key Size: %d bits\n", pub.N.BitLen())
 	case *ecdsa.PublicKey:
 		keySize = fmt.Sprintf("Key Type: ECDSA, Key Size: %d bits\n", pub.Params().BitSize)
+	case *x509.AugmentedECDSA:
+		keySize = fmt.Sprintf("Key Type: ECDSA, Key Size: %d bits\n", pub.Pub.Params().BitSize)
 	case ed25519.PublicKey:
 		keySize = fmt.Sprintf("Key Type: Ed25519, Key Size: %d bits\n", len(pub)*8)
 	default:
@@ -51,10 +56,20 @@ func GetCertificateDetails(cert *x509.Certificate) string {
 	// 3. Signature Algorithm
 	sigAlgo := fmt.Sprintf("Signature Algorithm: %s\n", cert.SignatureAlgorithm.String())
 
-	// 4. Subject Alternative Names
+	// 4. Subject Alternative Names — include all SAN types (DNS, IP, email)
+	var sanParts []string
+	for _, dns := range cert.DNSNames {
+		sanParts = append(sanParts, "DNS:"+dns)
+	}
+	for _, ip := range cert.IPAddresses {
+		sanParts = append(sanParts, "IP:"+ip.String())
+	}
+	for _, email := range cert.EmailAddresses {
+		sanParts = append(sanParts, "email:"+email)
+	}
 	san := "SANs: "
-	if len(cert.DNSNames) > 0 {
-		san += fmt.Sprintf("%v", cert.DNSNames)
+	if len(sanParts) > 0 {
+		san += fmt.Sprintf("%v", sanParts)
 	} else {
 		san += "None"
 	}
@@ -70,7 +85,7 @@ func GetCSRDetails(csr *x509.CertificateRequest) (*CSRDetails, error) {
 
 	uris, err := GetCSRURIs(csr)
 	if err != nil {
-		fmt.Println("Error extracting URI SANs:", err)
+		fmt.Fprintf(os.Stderr, "Error extracting URI SANs: %v\n", err)
 		uris = []*url.URL{} // fallback to empty slice
 	}
 
@@ -100,10 +115,17 @@ func GetCSRDetails(csr *x509.CertificateRequest) (*CSRDetails, error) {
 	details.PublicKeyAlgorithm = csr.PublicKeyAlgorithm.String()
 	details.SignatureAlgorithm = csr.SignatureAlgorithm.String()
 
-	// Key size detection
+	// Key size detection — covers RSA, ECDSA, and Ed25519.
+	// zcrypto wraps ECDSA public keys in *x509.AugmentedECDSA.
 	switch pub := csr.PublicKey.(type) {
 	case *rsa.PublicKey:
-		details.KeySize = pub.Size() * 8 // RSA key size in bits
+		details.KeySize = pub.Size() * 8
+	case *ecdsa.PublicKey:
+		details.KeySize = pub.Params().BitSize
+	case *x509.AugmentedECDSA:
+		details.KeySize = pub.Pub.Params().BitSize
+	case ed25519.PublicKey:
+		details.KeySize = 256 // Ed25519 is always 256-bit security
 	default:
 		details.KeySize = 0
 	}
@@ -112,6 +134,7 @@ func GetCSRDetails(csr *x509.CertificateRequest) (*CSRDetails, error) {
 }
 
 var oidSAN = asn1.ObjectIdentifier{2, 5, 29, 17} // SubjectAltName OID
+
 // GetCSRURIs extracts URI SANs from a x509 CSR
 func GetCSRURIs(csr *x509.CertificateRequest) ([]*url.URL, error) {
 	var uris []*url.URL
@@ -145,23 +168,6 @@ func GetCSRURIs(csr *x509.CertificateRequest) ([]*url.URL, error) {
 	}
 
 	return uris, nil
-}
-
-// Helper to print URI SANs in CSR
-func PrintCSRURIs(csr *x509.CertificateRequest) {
-	uris, err := GetCSRURIs(csr)
-	if err != nil {
-		fmt.Println("Error extracting URI SANs:", err)
-		return
-	}
-	if len(uris) == 0 {
-		fmt.Println("No URI SANs in CSR")
-	} else {
-		fmt.Println("URI SANs in CSR:")
-		for _, u := range uris {
-			fmt.Println("-", u.String())
-		}
-	}
 }
 
 func (c *CSRDetails) String() string {

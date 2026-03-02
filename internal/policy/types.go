@@ -9,24 +9,12 @@ import (
 )
 
 type Severity string
-type TargetKind int
-
-const (
-	KindCertificate TargetKind = iota
-	KindCSR
-)
 
 const (
 	SeverityLow    Severity = "LOW"
 	SeverityMedium Severity = "MEDIUM"
 	SeverityHigh   Severity = "HIGH"
 )
-
-type Target struct {
-	Kind TargetKind
-	Cert *x509.Certificate
-	CSR  *x509.CertificateRequest
-}
 
 type Violation struct {
 	RuleID   string   `json:"rule_id"`

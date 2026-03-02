@@ -16,6 +16,13 @@ type Policy struct {
 	SMIME       SMIMEPolicy       `yaml:"smime"`
 	TLSServer   TLSServerPolicy   `yaml:"tls_server"`
 	Root        RootPolicy        `yaml:"root"`
+
+	// ZLintSeverityOverrides lets operators downgrade (or upgrade) specific
+	// zlint lint results from their default mapping. Keys are the raw zlint
+	// lint name (e.g. "e_sub_cert_cert_policy_empty"); values are "HIGH",
+	// "MEDIUM", or "LOW". Results not listed here use the default mapping
+	// (Error → HIGH, Warn → MEDIUM).
+	ZLintSeverityOverrides map[string]Severity `yaml:"zlint_severity_overrides"`
 }
 
 type RootPolicy struct {
@@ -36,6 +43,11 @@ type CertificatePolicy struct {
 	MinRSAKeySize              int      `yaml:"min_rsa_key_size"`
 	AllowedSignatureAlgorithms []string `yaml:"allowed_signature_algorithms"`
 	RequireSAN                 bool     `yaml:"require_san"`
+
+	// MinECDSACurveBits enforces a minimum ECDSA curve security level.
+	// Set to 256 to reject P-192 and P-224; set to 384 to also reject P-256.
+	// Zero disables the check.
+	MinECDSACurveBits int `yaml:"min_ecdsa_curve_bits"`
 
 	EnablePQCChecks        bool     `yaml:"enable_pqc_checks"`
 	DisallowLowSecurityPQC bool     `yaml:"disallow_low_security_pqc"`

@@ -1,5 +1,6 @@
 version: "1.0"
 
+# Pre-issuance CSR checks
 csr:
   min_rsa_key_size: 2048
   allowed_signature_algorithms:
@@ -7,47 +8,63 @@ csr:
     - ECDSA-SHA256
   require_san: true
 
+# Universal certificate checks
 certificate:
   min_rsa_key_size: 2048
-  max_validity_days: 398
+  max_validity_days: 398         # CA/B Forum BR 7.1.4.2.1
   allowed_signature_algorithms:
     - SHA256-RSA
     - ECDSA-SHA256
   require_san: true
+
+  # Post-Quantum Cryptography
   enable_pqc_checks: true
   allowed_pqc_oids:
-    - "2.16.840.1.101.3.4.1.56"
-    - "2.16.840.1.101.3.4.1.57"
-  disallow_low_security_pqc: true
+    - "2.16.840.1.101.3.4.1.56"  # ML-KEM-768
+    - "2.16.840.1.101.3.4.1.57"  # ML-KEM-1024
+  disallow_low_security_pqc: true  # Blocks ML-KEM-512 (2.16.840.1.101.3.4.1.55)
 
+# Enforcement behaviour
 enforcement:
-  mode: "audit"
-  fail_on: ["HIGH"]
+  mode: "audit"          # audit | preissuance
+  fail_on: ["HIGH"]      # Severity levels that trigger exit 1 in preissuance mode
 
+# Extended Validation
 ev:
   enabled: true
   required_subject_fields:
     organization: true
     country: true
-    business_category: true
+    business_category: true      # OID 2.5.4.15 — distinct from OU (2.5.4.11)
   required_ekus:
-    - 1
+    - 1  # serverAuth
 
+# S/MIME Baseline Requirements
 smime:
-  enabled: false
+  enabled: true
   require_eku:
-    - 4
+    - 4  # emailProtection
   require_email: true
   require_revocation: true
   require_digital_signature: true
 
+# TLS Server profile
 tls_server:
   require_san: true
 
+# Root CA policy
 root:
   enabled: true
-  min_rsa_key_size: 2048
+  min_rsa_key_size: 4096
+  require_self_signed: true
+  require_key_usage_cert_sign: true
   allowed_signature_algorithms:
     - SHA256-RSA
     - ECDSA-SHA256
-  require_key_usage_cert_sign: true
+
+# Optional: downgrade specific zlint lint results to a lower severity.
+# Uncomment and add entries as needed. Keys are the lint name as returned
+# by zlint (without the "ZLINT-" prefix used in TrustPulse rule IDs).
+# zlint_severity_overrides:
+#   e_sub_cert_cert_policy_empty: "MEDIUM"
+#   w_ext_subject_key_identifier_missing_sub_cert: "LOW"
