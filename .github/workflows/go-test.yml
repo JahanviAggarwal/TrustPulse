@@ -23,19 +23,22 @@ jobs:
 
       - name: Run Tests with Coverage
         run: |
-          go test ./... -v -coverprofile=coverage.out -covermode=atomic
+          mkdir -p coverage
+          go test -coverpkg=./... -coverprofile=coverage/coverage.out -covermode=atomic ./...
 
-      - name: Display Coverage Summary
-        run: go tool cover -func=coverage.out
+      - name: Display Coverage
+        run: go tool cover -func=coverage/coverage.out
 
       - name: Enforce Minimum Coverage (70%)
         run: |
-          total=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+          total=$(go tool cover -func=coverage/coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          threshold=70
           echo "Total coverage: $total%"
-          threshold=55
-          result=$(echo "$total < $threshold" | bc)
+          result=$(echo "$total >= $threshold" | bc)
           if [ "$result" -eq 1 ]; then
-            echo "Coverage is below threshold!"
+            echo "Coverage OK ✅"
+          else
+            echo "Coverage below threshold ❌"
             exit 1
           fi
 
