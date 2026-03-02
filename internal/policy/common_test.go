@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JahanviAggarwal/TrustPulse/internal/models"
 	"github.com/stretchr/testify/require"
 	zcrypto "github.com/zmap/zcrypto/x509"
 )
@@ -152,8 +153,8 @@ func mustBuildCSR(t *testing.T, opts *csrOpts) *zcrypto.CertificateRequest {
 	return zCSR
 }
 
-// ptrViolationsHaveID reports whether a []*Violation slice contains ruleID.
-func ptrViolationsHaveID(vs []*Violation, ruleID string) bool {
+// ptrViolationsHaveID reports whether a []*models.Violation slice contains ruleID.
+func ptrViolationsHaveID(vs []*models.Violation, ruleID string) bool {
 	for _, v := range vs {
 		if v != nil && v.RuleID == ruleID {
 			return true

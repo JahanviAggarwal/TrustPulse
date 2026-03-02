@@ -4,6 +4,7 @@ import (
 	stdpkix "crypto/x509/pkix"
 	"testing"
 
+	"github.com/JahanviAggarwal/TrustPulse/internal/models"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,7 +16,7 @@ func TestNewEngine(t *testing.T) {
 
 func TestEngineRegister(t *testing.T) {
 	e := NewEngine()
-	e.Register(&RuleUniversalCert{Policy: &CertificatePolicy{}})
+	e.Register(&RuleUniversalCert{Policy: &models.CertificatePolicy{}})
 	require.Len(t, e.rules, 1)
 }
 
@@ -25,7 +26,7 @@ func TestEngineEvaluateCert(t *testing.T) {
 		subject: stdpkix.Name{CommonName: "test.example.com"},
 	})
 	e := NewEngine()
-	e.Register(&RuleUniversalCert{Policy: &CertificatePolicy{MinRSAKeySize: 2048}})
+	e.Register(&RuleUniversalCert{Policy: &models.CertificatePolicy{MinRSAKeySize: 2048}})
 	vs := e.EvaluateCert(cert.ZCert, DefaultPolicy())
 	require.Contains(t, violationIDs(vs), "CERT-KEY-001")
 }
@@ -42,7 +43,7 @@ func TestEngineEvaluateCSR(t *testing.T) {
 		subject: stdpkix.Name{CommonName: "csr.example.com"},
 	})
 	e := NewEngine()
-	e.Register(&RuleUniversalCSR{Policy: &CSRPolicy{MinRSAKeySize: 2048}})
+	e.Register(&RuleUniversalCSR{Policy: &models.CSRPolicy{MinRSAKeySize: 2048}})
 	vs := e.EvaluateCSR(csr, DefaultPolicy())
 	require.Contains(t, violationIDs(vs), "CSR-KEY-001")
 }
@@ -71,7 +72,6 @@ func TestBuildEngine_compliantCert(t *testing.T) {
 	}
 }
 
-// isClassicalAlgoOID covers well-known RSA/ECDSA/EdDSA OIDs and rejects unknown ones.
 func TestClassicalAlgoOIDs(t *testing.T) {
 	classical := []string{
 		"1.2.840.113549.1.1.1",  // rsaEncryption
@@ -83,11 +83,11 @@ func TestClassicalAlgoOIDs(t *testing.T) {
 	for _, oid := range classical {
 		require.True(t, isClassicalAlgoOID(oid), "expected classical: %s", oid)
 	}
-	require.False(t, isClassicalAlgoOID("9.9.9.9.9.9"), "random OID should not be classical")
-	require.False(t, isClassicalAlgoOID("2.16.840.1.101.3.4.1.56"), "ML-KEM-768 should not be classical")
+	require.False(t, isClassicalAlgoOID("9.9.9.9.9.9"))
+	require.False(t, isClassicalAlgoOID("2.16.840.1.101.3.4.1.56"))
 }
 
-func violationIDs(vs []Violation) []string {
+func violationIDs(vs []models.Violation) []string {
 	out := make([]string, len(vs))
 	for i, v := range vs {
 		out[i] = v.RuleID

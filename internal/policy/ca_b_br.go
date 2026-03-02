@@ -7,36 +7,37 @@ import (
 	"strings"
 	"time"
 
+	"github.com/JahanviAggarwal/TrustPulse/internal/models"
 	"github.com/zmap/zcrypto/x509"
 )
 
 type RuleTLSServerCert struct {
-	Policy *TLSServerPolicy
+	Policy *models.TLSServerPolicy
 }
 
 type RuleUniversalCert struct {
-	Policy *CertificatePolicy
+	Policy *models.CertificatePolicy
 }
 
 type RuleUniversalCSR struct {
-	Policy *CSRPolicy
+	Policy *models.CSRPolicy
 }
 
-func (r *RuleUniversalCert) ValidateCert(cert *x509.Certificate, p *Policy) []*Violation {
+func (r *RuleUniversalCert) ValidateCert(cert *x509.Certificate, p *models.Policy) []*models.Violation {
 	if r.Policy == nil {
 		return nil
 	}
 
-	var violations []*Violation
+	var violations []*models.Violation
 
 	// RSA key size
 	if cert.PublicKeyAlgorithm == x509.RSA {
 		if rsaKey, ok := cert.PublicKey.(*rsa.PublicKey); ok {
 			if rsaKey.Size()*8 < r.Policy.MinRSAKeySize {
-				violations = append(violations, &Violation{
+				violations = append(violations, &models.Violation{
 					RuleID:   "CERT-KEY-001",
 					Standard: "Certificate Policy",
-					Severity: SeverityHigh,
+					Severity: models.SeverityHigh,
 					Message:  "RSA key size below minimum requirement",
 				})
 			}
@@ -54,16 +55,17 @@ func (r *RuleUniversalCert) ValidateCert(cert *x509.Certificate, p *Policy) []*V
 		case *ecdsa.PublicKey:
 			curveBits = pub.Params().BitSize
 			curveName = pub.Params().Name
+
 		case *x509.AugmentedECDSA:
 			curveBits = pub.Pub.Params().BitSize
 			curveName = pub.Pub.Params().Name
 		}
 
 		if curveBits > 0 && curveBits < r.Policy.MinECDSACurveBits {
-			violations = append(violations, &Violation{
+			violations = append(violations, &models.Violation{
 				RuleID:   "CERT-ECDSA-CURVE-001",
 				Standard: "Certificate Policy",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message: fmt.Sprintf(
 					"ECDSA curve %s (%d bits) is below policy minimum of %d bits",
 					curveName, curveBits, r.Policy.MinECDSACurveBits,
@@ -83,10 +85,10 @@ func (r *RuleUniversalCert) ValidateCert(cert *x509.Certificate, p *Policy) []*V
 			}
 		}
 		if !allowed {
-			violations = append(violations, &Violation{
+			violations = append(violations, &models.Violation{
 				RuleID:   "CERT-SIG-001",
 				Standard: "Certificate Policy",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message:  "Signature algorithm not allowed by policy",
 			})
 		}
@@ -96,10 +98,10 @@ func (r *RuleUniversalCert) ValidateCert(cert *x509.Certificate, p *Policy) []*V
 	if r.Policy.MaxValidityDays > 0 {
 		maxDuration := time.Duration(r.Policy.MaxValidityDays) * 24 * time.Hour
 		if cert.NotAfter.Sub(cert.NotBefore) > maxDuration {
-			violations = append(violations, &Violation{
+			violations = append(violations, &models.Violation{
 				RuleID:   "CERT-VAL-001",
 				Standard: "Certificate Policy",
-				Severity: SeverityMedium,
+				Severity: models.SeverityMedium,
 				Message:  "Certificate validity exceeds policy maximum",
 			})
 		}
@@ -108,10 +110,10 @@ func (r *RuleUniversalCert) ValidateCert(cert *x509.Certificate, p *Policy) []*V
 	// SAN presence
 	if r.Policy.RequireSAN {
 		if len(cert.DNSNames) == 0 && len(cert.EmailAddresses) == 0 && len(cert.IPAddresses) == 0 {
-			violations = append(violations, &Violation{
+			violations = append(violations, &models.Violation{
 				RuleID:   "CERT-SAN-001",
 				Standard: "Certificate Policy",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message:  "Subject Alternative Name extension is required",
 			})
 		}
@@ -130,10 +132,11 @@ func (r *RuleUniversalCert) ValidateCert(cert *x509.Certificate, p *Policy) []*V
 						break
 					}
 				}
+
 				if !allowed {
-					violations = append(violations, &Violation{
+					violations = append(violations, &models.Violation{
 						RuleID:   "RFC5280-PQC-NOT-ALLOWED",
-						Severity: SeverityHigh,
+						Severity: models.SeverityHigh,
 						Message:  "Certificate uses disallowed PQC algorithm OID: " + algoOID,
 						Standard: "RFC5280 / NIST PQC",
 					})
@@ -141,9 +144,9 @@ func (r *RuleUniversalCert) ValidateCert(cert *x509.Certificate, p *Policy) []*V
 			}
 			// ML-KEM-512 (Kyber-512) is the lowest NIST PQC security level
 			if algoOID == "2.16.840.1.101.3.4.1.55" && r.Policy.DisallowLowSecurityPQC {
-				violations = append(violations, &Violation{
+				violations = append(violations, &models.Violation{
 					RuleID:   "RFC5280-PQC-LOW-SECURITY",
-					Severity: SeverityMedium,
+					Severity: models.SeverityMedium,
 					Message:  "Certificate uses ML-KEM-512 (lower security level)",
 					Standard: "NIST PQC",
 				})
@@ -154,24 +157,24 @@ func (r *RuleUniversalCert) ValidateCert(cert *x509.Certificate, p *Policy) []*V
 	return violations
 }
 
-func (r *RuleUniversalCert) ValidateCSR(csr *x509.CertificateRequest, p *Policy) []*Violation {
+func (r *RuleUniversalCert) ValidateCSR(csr *x509.CertificateRequest, p *models.Policy) []*models.Violation {
 	return nil
 }
 
-func (r *RuleUniversalCSR) ValidateCSR(csr *x509.CertificateRequest, p *Policy) []*Violation {
+func (r *RuleUniversalCSR) ValidateCSR(csr *x509.CertificateRequest, p *models.Policy) []*models.Violation {
 	if r.Policy == nil {
 		return nil
 	}
 
-	var violations []*Violation
+	var violations []*models.Violation
 
 	if csr.PublicKeyAlgorithm == x509.RSA {
 		if key, ok := csr.PublicKey.(*rsa.PublicKey); ok {
 			if key.Size()*8 < r.Policy.MinRSAKeySize {
-				violations = append(violations, &Violation{
+				violations = append(violations, &models.Violation{
 					RuleID:   "CSR-KEY-001",
 					Standard: "Pre-issuance guardrail",
-					Severity: SeverityHigh,
+					Severity: models.SeverityHigh,
 					Message:  "CSR RSA key size below minimum requirement",
 				})
 			}
@@ -187,11 +190,12 @@ func (r *RuleUniversalCSR) ValidateCSR(csr *x509.CertificateRequest, p *Policy) 
 				break
 			}
 		}
+
 		if !allowed {
-			violations = append(violations, &Violation{
+			violations = append(violations, &models.Violation{
 				RuleID:   "CSR-SIG-001",
 				Standard: "Pre-issuance guardrail",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message:  "CSR signature algorithm not allowed by policy",
 			})
 		}
@@ -199,10 +203,10 @@ func (r *RuleUniversalCSR) ValidateCSR(csr *x509.CertificateRequest, p *Policy) 
 
 	if r.Policy.RequireSAN {
 		if len(csr.DNSNames) == 0 && len(csr.EmailAddresses) == 0 && len(csr.IPAddresses) == 0 {
-			violations = append(violations, &Violation{
+			violations = append(violations, &models.Violation{
 				RuleID:   "CSR-SAN-001",
 				Standard: "Pre-issuance guardrail",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message:  "CSR missing Subject Alternative Name extension",
 			})
 		}
@@ -211,23 +215,23 @@ func (r *RuleUniversalCSR) ValidateCSR(csr *x509.CertificateRequest, p *Policy) 
 	return violations
 }
 
-func (r *RuleUniversalCSR) ValidateCert(cert *x509.Certificate, p *Policy) []*Violation {
+func (r *RuleUniversalCSR) ValidateCert(cert *x509.Certificate, p *models.Policy) []*models.Violation {
 	return nil
 }
 
-func (r *RuleTLSServerCert) ValidateCert(cert *x509.Certificate, p *Policy) []*Violation {
+func (r *RuleTLSServerCert) ValidateCert(cert *x509.Certificate, p *models.Policy) []*models.Violation {
 	if r.Policy == nil {
 		return nil
 	}
 
-	var violations []*Violation
+	var violations []*models.Violation
 
 	if r.Policy.RequireSAN {
 		if len(cert.DNSNames) == 0 && len(cert.IPAddresses) == 0 {
-			violations = append(violations, &Violation{
+			violations = append(violations, &models.Violation{
 				RuleID:   "TLS-SAN-001",
 				Standard: "CA/B Forum BR 7.1.4.2.1",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message:  "TLS certificate must contain DNS or IP SAN",
 			})
 		}
@@ -236,19 +240,19 @@ func (r *RuleTLSServerCert) ValidateCert(cert *x509.Certificate, p *Policy) []*V
 	return violations
 }
 
-func (r *RuleTLSServerCert) ValidateCSR(csr *x509.CertificateRequest, p *Policy) []*Violation {
+func (r *RuleTLSServerCert) ValidateCSR(csr *x509.CertificateRequest, p *models.Policy) []*models.Violation {
 	if r.Policy == nil {
 		return nil
 	}
 
-	var violations []*Violation
+	var violations []*models.Violation
 
 	if r.Policy.RequireSAN {
 		if len(csr.DNSNames) == 0 && len(csr.IPAddresses) == 0 {
-			violations = append(violations, &Violation{
+			violations = append(violations, &models.Violation{
 				RuleID:   "TLS-CSR-SAN-001",
 				Standard: "Pre-issuance TLS policy",
-				Severity: SeverityHigh,
+				Severity: models.SeverityHigh,
 				Message:  "TLS CSR must contain DNS or IP SAN",
 			})
 		}

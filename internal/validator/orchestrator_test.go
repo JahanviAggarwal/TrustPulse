@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
+	"github.com/JahanviAggarwal/TrustPulse/internal/models"
 	"github.com/JahanviAggarwal/TrustPulse/internal/policy"
+	"github.com/stretchr/testify/require"
 )
 
 // writePEM encodes DER bytes as a PEM block in a temp file and returns the path.
@@ -114,7 +114,7 @@ func TestReport_ShouldFail_PreissuanceMode(t *testing.T) {
 	// CSR with no SAN → triggers CSR-SAN-001 (HIGH)
 	p := policy.DefaultPolicy()
 	p.Enforcement.Mode = "preissuance"
-	p.Enforcement.FailOn = []policy.Severity{policy.SeverityHigh}
+	p.Enforcement.FailOn = []models.Severity{models.SeverityHigh}
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)

@@ -5,11 +5,12 @@ import (
 	stdpkix "crypto/x509/pkix"
 	"testing"
 
+	"github.com/JahanviAggarwal/TrustPulse/internal/models"
 	"github.com/stretchr/testify/require"
 )
 
-func rootPolicy(minKeyBits int) *RootPolicy {
-	return &RootPolicy{
+func rootPolicy(minKeyBits int) *models.RootPolicy {
+	return &models.RootPolicy{
 		Enabled:                 true,
 		MinRSAKeySize:           minKeyBits,
 		RequireSelfSigned:       true,

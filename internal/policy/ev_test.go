@@ -6,6 +6,7 @@ import (
 	stdasn1 "encoding/asn1"
 	"testing"
 
+	"github.com/JahanviAggarwal/TrustPulse/internal/models"
 	"github.com/stretchr/testify/require"
 	zcrypto "github.com/zmap/zcrypto/x509"
 )
@@ -13,8 +14,8 @@ import (
 // evPolicyOID is the CA/B Forum EV TLS policy OID: 2.23.140.1.1
 var evPolicyOID = stdasn1.ObjectIdentifier{2, 23, 140, 1, 1}
 
-func enabledEVPolicy() *EVPolicy {
-	return &EVPolicy{
+func enabledEVPolicy() *models.EVPolicy {
+	return &models.EVPolicy{
 		Enabled: true,
 		RequiredSubjectFields: struct {
 			Organization     bool `yaml:"organization"`
@@ -32,7 +33,7 @@ func enabledEVPolicy() *EVPolicy {
 // evAwarePolicy returns DefaultPolicy with EV checking enabled.
 // The EV rules check p.EV.Enabled from the *Policy argument, not r.Policy,
 // so DefaultPolicy() (EV disabled) silently skips all EV checks.
-func evAwarePolicy() *Policy {
+func evAwarePolicy() *models.Policy {
 	p := DefaultPolicy()
 	p.EV = *enabledEVPolicy()
 	return p

@@ -1,5 +1,15 @@
 version: "1.0"
 
+# zlint — runs the full zmap/zlint BR lint suite on certificates.
+# Set enabled: false to skip it (useful for internal or dev certs).
+zlint:
+  enabled: true
+  # Uncomment to remap individual lint result severities.
+  # Keys are the raw lint name (without the "ZLINT-" prefix).
+  # severity_overrides:
+  #   e_sub_cert_cert_policy_empty: "MEDIUM"
+  #   w_ext_subject_key_identifier_missing_sub_cert: "LOW"
+
 # Pre-issuance CSR checks
 csr:
   min_rsa_key_size: 2048
@@ -22,7 +32,7 @@ certificate:
   allowed_pqc_oids:
     - "2.16.840.1.101.3.4.1.56"  # ML-KEM-768
     - "2.16.840.1.101.3.4.1.57"  # ML-KEM-1024
-  disallow_low_security_pqc: true  # Blocks ML-KEM-512 (2.16.840.1.101.3.4.1.55)
+  disallow_low_security_pqc: true  # Blocks ML-KEM-512
 
 # Enforcement behaviour
 enforcement:
@@ -35,7 +45,7 @@ ev:
   required_subject_fields:
     organization: true
     country: true
-    business_category: true      # OID 2.5.4.15 — distinct from OU (2.5.4.11)
+    business_category: true
   required_ekus:
     - 1  # serverAuth
 
@@ -61,10 +71,3 @@ root:
   allowed_signature_algorithms:
     - SHA256-RSA
     - ECDSA-SHA256
-
-# Optional: downgrade specific zlint lint results to a lower severity.
-# Uncomment and add entries as needed. Keys are the lint name as returned
-# by zlint (without the "ZLINT-" prefix used in TrustPulse rule IDs).
-# zlint_severity_overrides:
-#   e_sub_cert_cert_policy_empty: "MEDIUM"
-#   w_ext_subject_key_identifier_missing_sub_cert: "LOW"
