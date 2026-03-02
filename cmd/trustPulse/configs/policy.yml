@@ -45,8 +45,9 @@ tls_server:
   require_san: true
 
 root:
+  enabled: true
   min_rsa_key_size: 2048
   allowed_signature_algorithms:
     - SHA256-RSA
     - ECDSA-SHA256
-  require_key_usage: true
+  require_key_usage_cert_sign: true
