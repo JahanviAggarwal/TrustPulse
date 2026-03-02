@@ -73,7 +73,7 @@ zlint:
 	require.Equal(t, models.Severity("LOW"), p.ZLint.SeverityOverrides["w_ext_subject_key_identifier_missing_sub_cert"])
 }
 
-func TestDefaultPolicy_zlintEnabled(t *testing.T) {
-	p := DefaultPolicy()
-	require.True(t, p.ZLint.Enabled, "zlint should be enabled in the default policy")
+func TestPolicy_zlintEnabled(t *testing.T) {
+	p := testPolicy()
+	require.True(t, p.ZLint.Enabled, "zlint should be enabled in the test policy")
 }

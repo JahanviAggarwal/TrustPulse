@@ -5,16 +5,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/JahanviAggarwal/TrustPulse/internal/models"
 	"github.com/JahanviAggarwal/TrustPulse/internal/policy"
 	"github.com/JahanviAggarwal/TrustPulse/internal/validator"
 )
 
-// version is overridden at build time via -ldflags "-X main.version=<tag>".
+// set via -ldflags at build time
 var version = "dev"
 
 func main() {
-	// Exit codes: 0=pass, 1=policy violation, 2=input/usage error, 3=system error
 	const (
 		exitOK          = 0
 		exitPolicyFail  = 1
@@ -22,8 +20,9 @@ func main() {
 		exitSystemError = 3
 	)
 
+	fileFlag := flag.String("file", "", "path to PEM file (certificate or CSR) to audit [required]")
 	modeFlag := flag.String("mode", "", "audit (default) or preissuance — exit 1 on violations matching fail_on")
-	policyFlag := flag.String("policy", "", "path to YAML policy file (built-in defaults if omitted)")
+	policyFlag := flag.String("policy", "", "path to YAML policy file (auto-detects policy.yaml/policy.yml in current directory if omitted)")
 	formatFlag := flag.String("format", "json", "output format: json (default) or text")
 	versionFlag := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
@@ -39,31 +38,38 @@ func main() {
 		os.Exit(exitInputError)
 	}
 
-	args := flag.Args()
-	if len(args) == 0 {
-		fmt.Fprintf(os.Stderr, "Usage: trustpulse [--mode=audit|preissuance] [--policy=policy.yaml] [--format=json|text] <file>\n")
+	filePath := *fileFlag
+	if filePath == "" {
+		fmt.Fprintf(os.Stderr, "error: --file is required\n")
+		fmt.Fprintf(os.Stderr, "Usage: trustpulse --file=<pem> [--mode=audit|preissuance] [--policy=policy.yaml] [--format=json|text]\n")
 		os.Exit(exitInputError)
 	}
-	filePath := args[0]
+
 	policyPath := *policyFlag
-
-	var p *models.Policy
-	var err error
-
-	if policyPath != "" {
-		p, err = policy.LoadPolicy(policyPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to load policy: %v\n", err)
-			os.Exit(exitSystemError)
+	if policyPath == "" {
+		for _, name := range []string{"policy.yaml", "policy.yml"} {
+			if _, err := os.Stat(name); err == nil {
+				policyPath = name
+				break
+			}
 		}
-		if format == "text" {
-			fmt.Printf("Policy loaded: %s\n", policyPath)
-		}
-	} else {
-		p = policy.DefaultPolicy()
+	}
+	if policyPath == "" {
+		fmt.Fprintf(os.Stderr, "error: no policy file found\n")
+		fmt.Fprintf(os.Stderr, "Use --policy=<path> or place a 'policy.yaml' in the current directory.\n")
+		os.Exit(exitInputError)
 	}
 
-	// Determine effective run mode: CLI flag wins; fall back to policy file; then "audit".
+	p, err := policy.LoadPolicy(policyPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to load policy %q: %v\n", policyPath, err)
+		os.Exit(exitSystemError)
+	}
+	if format == "text" {
+		fmt.Printf("Policy loaded: %s\n", policyPath)
+	}
+
+	// flag wins; fall back to what's in the policy file, then default to audit
 	mode := *modeFlag
 	if mode == "" {
 		mode = p.Enforcement.Mode
@@ -82,13 +88,11 @@ func main() {
 		os.Exit(exitSystemError)
 	}
 
-	// ─── Output ──────
 	switch format {
 	case "text":
 		fmt.Println("\n--- AUDIT REPORT ---")
 		fmt.Println(report.String())
-
-	default: // "json"
+	default:
 		out, err := report.JSON(p, mode)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to serialise report: %v\n", err)

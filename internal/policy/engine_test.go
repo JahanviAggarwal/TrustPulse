@@ -27,14 +27,14 @@ func TestEngineEvaluateCert(t *testing.T) {
 	})
 	e := NewEngine()
 	e.Register(&RuleUniversalCert{Policy: &models.CertificatePolicy{MinRSAKeySize: 2048}})
-	vs := e.EvaluateCert(cert.ZCert, DefaultPolicy())
+	vs := e.EvaluateCert(cert.ZCert, testPolicy())
 	require.Contains(t, violationIDs(vs), "CERT-KEY-001")
 }
 
 func TestEngineEvaluateCert_noRules(t *testing.T) {
 	cert := mustBuildCert(t, &certOpts{keyBits: 1024})
 	e := NewEngine()
-	require.Empty(t, e.EvaluateCert(cert.ZCert, DefaultPolicy()))
+	require.Empty(t, e.EvaluateCert(cert.ZCert, testPolicy()))
 }
 
 func TestEngineEvaluateCSR(t *testing.T) {
@@ -44,18 +44,18 @@ func TestEngineEvaluateCSR(t *testing.T) {
 	})
 	e := NewEngine()
 	e.Register(&RuleUniversalCSR{Policy: &models.CSRPolicy{MinRSAKeySize: 2048}})
-	vs := e.EvaluateCSR(csr, DefaultPolicy())
+	vs := e.EvaluateCSR(csr, testPolicy())
 	require.Contains(t, violationIDs(vs), "CSR-KEY-001")
 }
 
 func TestEngineEvaluateCSR_noRules(t *testing.T) {
 	csr := mustBuildCSR(t, &csrOpts{keyBits: 1024})
 	e := NewEngine()
-	require.Empty(t, e.EvaluateCSR(csr, DefaultPolicy()))
+	require.Empty(t, e.EvaluateCSR(csr, testPolicy()))
 }
 
 func TestBuildEngine(t *testing.T) {
-	e := BuildEngine(DefaultPolicy())
+	e := BuildEngine(testPolicy())
 	// universal cert, universal CSR, TLS, SMIME, EV, Root
 	require.Len(t, e.rules, 6)
 }
@@ -65,7 +65,7 @@ func TestBuildEngine_compliantCert(t *testing.T) {
 		keyBits:  2048,
 		dnsNames: []string{"secure.example.com"},
 	})
-	p := DefaultPolicy()
+	p := testPolicy()
 	e := BuildEngine(p)
 	for _, v := range e.EvaluateCert(cert.ZCert, p) {
 		require.NotEqual(t, "CERT-KEY-001", v.RuleID)

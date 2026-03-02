@@ -54,7 +54,7 @@ func rootPolicyWithECDSA(minRSA, minECDSA int) *models.RootPolicy {
 func TestRuleRoot_ECDSACurve_P384_pass(t *testing.T) {
 	ca := mustBuildECDSACA(t, elliptic.P384())
 	rule := &RuleRoot{Policy: rootPolicyWithECDSA(4096, 384)}
-	vs := rule.ValidateCert(ca, DefaultPolicy())
+	vs := rule.ValidateCert(ca, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "ROOT-ECDSA-CURVE"),
 		"P-384 root CA should pass a 384-bit minimum")
 }
@@ -62,7 +62,7 @@ func TestRuleRoot_ECDSACurve_P384_pass(t *testing.T) {
 func TestRuleRoot_ECDSACurve_P521_pass(t *testing.T) {
 	ca := mustBuildECDSACA(t, elliptic.P521())
 	rule := &RuleRoot{Policy: rootPolicyWithECDSA(4096, 384)}
-	vs := rule.ValidateCert(ca, DefaultPolicy())
+	vs := rule.ValidateCert(ca, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "ROOT-ECDSA-CURVE"),
 		"P-521 root CA should pass a 384-bit minimum")
 }
@@ -71,7 +71,7 @@ func TestRuleRoot_ECDSACurve_P256_fail(t *testing.T) {
 	// P-256 (256 bits) is below the 384-bit minimum for root CAs
 	ca := mustBuildECDSACA(t, elliptic.P256())
 	rule := &RuleRoot{Policy: rootPolicyWithECDSA(4096, 384)}
-	vs := rule.ValidateCert(ca, DefaultPolicy())
+	vs := rule.ValidateCert(ca, testPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "ROOT-ECDSA-CURVE"),
 		"P-256 root CA should be rejected when minimum is 384 bits")
 }
@@ -79,7 +79,7 @@ func TestRuleRoot_ECDSACurve_P256_fail(t *testing.T) {
 func TestRuleRoot_ECDSACurve_P224_fail(t *testing.T) {
 	ca := mustBuildECDSACA(t, elliptic.P224())
 	rule := &RuleRoot{Policy: rootPolicyWithECDSA(4096, 256)}
-	vs := rule.ValidateCert(ca, DefaultPolicy())
+	vs := rule.ValidateCert(ca, testPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "ROOT-ECDSA-CURVE"),
 		"P-224 root CA should be rejected when minimum is 256 bits")
 }
@@ -88,7 +88,7 @@ func TestRuleRoot_ECDSACurve_disabled(t *testing.T) {
 	// MinECDSACurveBits=0 disables the check — even P-224 should pass
 	ca := mustBuildECDSACA(t, elliptic.P224())
 	rule := &RuleRoot{Policy: rootPolicyWithECDSA(4096, 0)}
-	vs := rule.ValidateCert(ca, DefaultPolicy())
+	vs := rule.ValidateCert(ca, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "ROOT-ECDSA-CURVE"),
 		"ECDSA curve check should be skipped when MinECDSACurveBits=0")
 }

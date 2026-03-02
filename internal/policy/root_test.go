@@ -25,7 +25,7 @@ func TestRuleRoot_LeafCert_Skipped(t *testing.T) {
 		dnsNames: []string{"leaf.example.com"},
 	})
 	rule := &RuleRoot{Policy: rootPolicy(2048)}
-	vs := rule.ValidateCert(leaf.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(leaf.ZCert, testPolicy())
 	require.Empty(t, vs, "expected no violations for a non-CA leaf cert")
 }
 
@@ -39,7 +39,7 @@ func TestRuleRoot_Disabled(t *testing.T) {
 	p := rootPolicy(2048)
 	p.Enabled = false
 	rule := &RuleRoot{Policy: p}
-	vs := rule.ValidateCert(ca.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(ca.ZCert, testPolicy())
 	require.Empty(t, vs, "expected no violations when root policy is disabled")
 }
 
@@ -51,7 +51,7 @@ func TestRuleRoot_SelfSigned_Pass(t *testing.T) {
 		keyUsage: stdx509.KeyUsageCertSign | stdx509.KeyUsageCRLSign,
 	})
 	rule := &RuleRoot{Policy: rootPolicy(2048)}
-	vs := rule.ValidateCert(ca.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(ca.ZCert, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "ROOT-NOT-SELF-SIGNED"),
 		"expected no ROOT-NOT-SELF-SIGNED for a self-signed CA")
 }
@@ -71,7 +71,7 @@ func TestRuleRoot_NotSelfSigned_Fail(t *testing.T) {
 		parent:   root,
 	})
 	rule := &RuleRoot{Policy: rootPolicy(2048)}
-	vs := rule.ValidateCert(intermediate.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(intermediate.ZCert, testPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "ROOT-NOT-SELF-SIGNED"),
 		"expected ROOT-NOT-SELF-SIGNED for intermediate CA signed by a different key")
 }
@@ -84,7 +84,7 @@ func TestRuleRoot_KeySize_Pass(t *testing.T) {
 		keyUsage: stdx509.KeyUsageCertSign | stdx509.KeyUsageCRLSign,
 	})
 	rule := &RuleRoot{Policy: rootPolicy(2048)}
-	vs := rule.ValidateCert(ca.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(ca.ZCert, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "ROOT-KEY-SIZE"),
 		"expected no ROOT-KEY-SIZE for 2048-bit root with 2048-bit minimum")
 }
@@ -97,7 +97,7 @@ func TestRuleRoot_KeySize_Fail(t *testing.T) {
 		keyUsage: stdx509.KeyUsageCertSign | stdx509.KeyUsageCRLSign,
 	})
 	rule := &RuleRoot{Policy: rootPolicy(2048)}
-	vs := rule.ValidateCert(ca.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(ca.ZCert, testPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "ROOT-KEY-SIZE"),
 		"expected ROOT-KEY-SIZE for 1024-bit root with 2048-bit minimum")
 }
@@ -110,7 +110,7 @@ func TestRuleRoot_KeyUsageCertSign_Pass(t *testing.T) {
 		keyUsage: stdx509.KeyUsageCertSign | stdx509.KeyUsageCRLSign,
 	})
 	rule := &RuleRoot{Policy: rootPolicy(2048)}
-	vs := rule.ValidateCert(ca.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(ca.ZCert, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "RFC5280-CA-KEYUSAGE"),
 		"expected no RFC5280-CA-KEYUSAGE when keyCertSign is set")
 }
@@ -123,7 +123,7 @@ func TestRuleRoot_KeyUsageCertSign_Fail(t *testing.T) {
 		keyUsage: stdx509.KeyUsageCRLSign, // no CertSign
 	})
 	rule := &RuleRoot{Policy: rootPolicy(2048)}
-	vs := rule.ValidateCert(ca.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(ca.ZCert, testPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "RFC5280-CA-KEYUSAGE"),
 		"expected RFC5280-CA-KEYUSAGE for CA without keyCertSign")
 }
@@ -134,7 +134,7 @@ func TestRuleRoot_CSR_KeySize_Pass(t *testing.T) {
 		subject: stdpkix.Name{CommonName: "Root CA"},
 	})
 	rule := &RuleRoot{Policy: rootPolicy(2048)}
-	vs := rule.ValidateCSR(csr, DefaultPolicy())
+	vs := rule.ValidateCSR(csr, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "CSR-ROOT-KEY-001"),
 		"expected no CSR-ROOT-KEY-001 for 2048-bit CSR")
 }
@@ -145,7 +145,7 @@ func TestRuleRoot_CSR_KeySize_Fail(t *testing.T) {
 		subject: stdpkix.Name{CommonName: "Root CA"},
 	})
 	rule := &RuleRoot{Policy: rootPolicy(2048)}
-	vs := rule.ValidateCSR(csr, DefaultPolicy())
+	vs := rule.ValidateCSR(csr, testPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "CSR-ROOT-KEY-001"),
 		"expected CSR-ROOT-KEY-001 for 1024-bit CSR")
 }

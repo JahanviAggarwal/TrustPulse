@@ -34,7 +34,7 @@ func TestCSRECDSACurve_P256_pass(t *testing.T) {
 	csr := mustBuildECDSACSR(t, elliptic.P256(), []string{"example.com"})
 	p := defaultCSRPolicy()
 	p.MinECDSACurveBits = 256
-	vs := (&RuleUniversalCSR{Policy: p}).ValidateCSR(csr, DefaultPolicy())
+	vs := (&RuleUniversalCSR{Policy: p}).ValidateCSR(csr, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "CSR-ECDSA-CURVE-001"),
 		"P-256 CSR should pass a 256-bit minimum")
 }
@@ -43,7 +43,7 @@ func TestCSRECDSACurve_P384_pass(t *testing.T) {
 	csr := mustBuildECDSACSR(t, elliptic.P384(), []string{"example.com"})
 	p := defaultCSRPolicy()
 	p.MinECDSACurveBits = 256
-	vs := (&RuleUniversalCSR{Policy: p}).ValidateCSR(csr, DefaultPolicy())
+	vs := (&RuleUniversalCSR{Policy: p}).ValidateCSR(csr, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "CSR-ECDSA-CURVE-001"),
 		"P-384 CSR should pass a 256-bit minimum")
 }
@@ -53,7 +53,7 @@ func TestCSRECDSACurve_P224_fail(t *testing.T) {
 	csr := mustBuildECDSACSR(t, elliptic.P224(), []string{"example.com"})
 	p := defaultCSRPolicy()
 	p.MinECDSACurveBits = 256
-	vs := (&RuleUniversalCSR{Policy: p}).ValidateCSR(csr, DefaultPolicy())
+	vs := (&RuleUniversalCSR{Policy: p}).ValidateCSR(csr, testPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "CSR-ECDSA-CURVE-001"),
 		"P-224 CSR should be rejected when minimum is 256 bits")
 }
@@ -63,7 +63,7 @@ func TestCSRECDSACurve_P256_highMin_fail(t *testing.T) {
 	csr := mustBuildECDSACSR(t, elliptic.P256(), []string{"example.com"})
 	p := defaultCSRPolicy()
 	p.MinECDSACurveBits = 384
-	vs := (&RuleUniversalCSR{Policy: p}).ValidateCSR(csr, DefaultPolicy())
+	vs := (&RuleUniversalCSR{Policy: p}).ValidateCSR(csr, testPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "CSR-ECDSA-CURVE-001"),
 		"P-256 CSR should be rejected when minimum is 384 bits")
 }
@@ -73,7 +73,7 @@ func TestCSRECDSACurve_disabled(t *testing.T) {
 	csr := mustBuildECDSACSR(t, elliptic.P224(), []string{"example.com"})
 	p := defaultCSRPolicy()
 	p.MinECDSACurveBits = 0
-	vs := (&RuleUniversalCSR{Policy: p}).ValidateCSR(csr, DefaultPolicy())
+	vs := (&RuleUniversalCSR{Policy: p}).ValidateCSR(csr, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "CSR-ECDSA-CURVE-001"),
 		"ECDSA curve check should be skipped when MinECDSACurveBits=0")
 }
@@ -86,7 +86,7 @@ func TestCSRECDSACurve_RSANotAffected(t *testing.T) {
 	})
 	p := defaultCSRPolicy()
 	p.MinECDSACurveBits = 521
-	vs := (&RuleUniversalCSR{Policy: p}).ValidateCSR(csr, DefaultPolicy())
+	vs := (&RuleUniversalCSR{Policy: p}).ValidateCSR(csr, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "CSR-ECDSA-CURVE-001"),
 		"RSA CSR should not trigger ECDSA curve check")
 }

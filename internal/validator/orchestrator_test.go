@@ -13,9 +13,34 @@ import (
 	"time"
 
 	"github.com/JahanviAggarwal/TrustPulse/internal/models"
-	"github.com/JahanviAggarwal/TrustPulse/internal/policy"
 	"github.com/stretchr/testify/require"
 )
+
+// testPolicy returns a minimal policy used across validator tests.
+// It keeps tests self-contained with no file-system dependency.
+func testPolicy() *models.Policy {
+	return &models.Policy{
+		Version: "1.0",
+		ZLint: models.ZLintPolicy{
+			Enabled: true,
+		},
+		CSR: models.CSRPolicy{
+			MinRSAKeySize:              2048,
+			RequireSAN:                 true,
+			AllowedSignatureAlgorithms: []string{"SHA256-RSA", "ECDSA-SHA256"},
+		},
+		Certificate: models.CertificatePolicy{
+			MinRSAKeySize:              2048,
+			MaxValidityDays:            398,
+			RequireSAN:                 true,
+			AllowedSignatureAlgorithms: []string{"SHA256-RSA", "ECDSA-SHA256"},
+		},
+		Enforcement: models.EnforcementPolicy{
+			Mode:   "audit",
+			FailOn: []models.Severity{"HIGH"},
+		},
+	}
+}
 
 // writePEM encodes DER bytes as a PEM block in a temp file and returns the path.
 func writePEM(t *testing.T, blockType string, der []byte) string {
@@ -64,20 +89,20 @@ func buildCSRBytes(t *testing.T) []byte {
 
 func TestRunAudit_Certificate(t *testing.T) {
 	path := writePEM(t, "CERTIFICATE", buildSelfSignedCACert(t))
-	report, err := RunAudit(path, policy.DefaultPolicy())
+	report, err := RunAudit(path, testPolicy())
 	require.NoError(t, err, "RunAudit should not return an error for a valid certificate")
 	require.NotNil(t, report, "RunAudit should return a non-nil report")
 }
 
 func TestRunAudit_CSR(t *testing.T) {
 	path := writePEM(t, "CERTIFICATE REQUEST", buildCSRBytes(t))
-	report, err := RunAudit(path, policy.DefaultPolicy())
+	report, err := RunAudit(path, testPolicy())
 	require.NoError(t, err, "RunAudit should not return an error for a valid CSR")
 	require.NotNil(t, report, "RunAudit should return a non-nil report")
 }
 
 func TestRunAudit_FileNotFound(t *testing.T) {
-	_, err := RunAudit(filepath.Join(t.TempDir(), "nonexistent.pem"), policy.DefaultPolicy())
+	_, err := RunAudit(filepath.Join(t.TempDir(), "nonexistent.pem"), testPolicy())
 	require.Error(t, err, "expected error for non-existent file")
 }
 
@@ -87,7 +112,7 @@ func TestRunAudit_InvalidPEM(t *testing.T) {
 	_, _ = f.WriteString("this is not PEM content")
 	f.Close()
 
-	_, err = RunAudit(f.Name(), policy.DefaultPolicy())
+	_, err = RunAudit(f.Name(), testPolicy())
 	require.Error(t, err, "expected error for non-PEM file content")
 }
 
@@ -97,13 +122,13 @@ func TestRunAudit_UnsupportedPEMType(t *testing.T) {
 	require.NoError(t, pem.Encode(f, &pem.Block{Type: "PRIVATE KEY", Bytes: []byte("dummy")}))
 	f.Close()
 
-	_, err = RunAudit(f.Name(), policy.DefaultPolicy())
+	_, err = RunAudit(f.Name(), testPolicy())
 	require.Error(t, err, "expected error for unsupported PEM type")
 }
 
 func TestReport_ShouldFail_AuditMode(t *testing.T) {
 	path := writePEM(t, "CERTIFICATE", buildSelfSignedCACert(t))
-	p := policy.DefaultPolicy()
+	p := testPolicy()
 	report, err := RunAudit(path, p)
 	require.NoError(t, err)
 	require.False(t, report.ShouldFail(p, "audit"),
@@ -112,7 +137,7 @@ func TestReport_ShouldFail_AuditMode(t *testing.T) {
 
 func TestReport_ShouldFail_PreissuanceMode(t *testing.T) {
 	// CSR with no SAN → triggers CSR-SAN-001 (HIGH)
-	p := policy.DefaultPolicy()
+	p := testPolicy()
 	p.Enforcement.Mode = "preissuance"
 	p.Enforcement.FailOn = []models.Severity{models.SeverityHigh}
 
@@ -133,7 +158,7 @@ func TestReport_ShouldFail_PreissuanceMode(t *testing.T) {
 
 func TestReport_JSON_ValidOutput(t *testing.T) {
 	path := writePEM(t, "CERTIFICATE REQUEST", buildCSRBytes(t))
-	p := policy.DefaultPolicy()
+	p := testPolicy()
 	report, err := RunAudit(path, p)
 	require.NoError(t, err)
 

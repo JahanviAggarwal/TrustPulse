@@ -8,27 +8,22 @@ import (
 	"github.com/JahanviAggarwal/TrustPulse/internal/checks"
 	"github.com/JahanviAggarwal/TrustPulse/internal/models"
 	"github.com/JahanviAggarwal/TrustPulse/internal/policy"
-
 	"github.com/zmap/zcrypto/x509"
 	"github.com/zmap/zlint/v3"
 	zlintRes "github.com/zmap/zlint/v3/lint"
 )
 
 func RunAudit(filePath string, p *models.Policy) (*models.Report, error) {
-
-	// Read file
 	fileBytes, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %v", err)
 	}
 
-	// Decode PEM
 	block, _ := pem.Decode(fileBytes)
 	if block == nil {
 		return nil, fmt.Errorf("failed to decode PEM")
 	}
 
-	// Build engine ONCE
 	engine := policy.BuildEngine(p)
 
 	var violations []models.Violation
@@ -42,7 +37,6 @@ func RunAudit(filePath string, p *models.Policy) (*models.Report, error) {
 			return nil, fmt.Errorf("failed to parse certificate: %v", err)
 		}
 
-		// Run ZLint (skipped when policy disables it)
 		if p.ZLint.Enabled {
 			zlintResult := zlint.LintCertificate(cert)
 			for name, res := range zlintResult.Results {
@@ -66,10 +60,7 @@ func RunAudit(filePath string, p *models.Policy) (*models.Report, error) {
 			}
 		}
 
-		// Run your policy engine
 		violations = append(violations, engine.EvaluateCert(cert, p)...)
-
-		// Collect details
 		details = checks.GetCertificateDetails(cert)
 
 	case "CERTIFICATE REQUEST":
@@ -78,7 +69,6 @@ func RunAudit(filePath string, p *models.Policy) (*models.Report, error) {
 			return nil, fmt.Errorf("failed to parse CSR: %v", err)
 		}
 
-		// Run policy rules
 		violations = append(violations, engine.EvaluateCSR(csr, p)...)
 
 		csrDetails, err := checks.GetCSRDetails(csr)
