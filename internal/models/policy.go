@@ -1,23 +1,22 @@
 package models
 
-import zcrypto "github.com/zmap/zcrypto/x509"
+import (
+	zcrypto "github.com/zmap/zcrypto/x509"
+)
 
-// ZLintPolicy controls whether the zmap/zlint BR lint suite runs and allows
-// per-lint severity overrides. Set Enabled=false to skip zlint entirely (e.g.
-// for internal or dev certs where the full BR suite is noisy).
+// ZLintPolicy controls the embedded zlint BR lint suite.
 type ZLintPolicy struct {
+	// Enabled controls whether zlint runs on certificates (default: true).
 	Enabled bool `yaml:"enabled"`
-
-	// SeverityOverrides remaps individual zlint result severities.
-	// Keys are the raw lint name (e.g. "e_sub_cert_cert_policy_empty").
-	// Values are "HIGH", "MEDIUM", or "LOW".
-	// Unlisted results use the default mapping: Error→HIGH, Warn→MEDIUM.
+	// SeverityOverrides lets operators reclassify individual lint results.
+	// Keys are the raw lint name (e.g. "e_sub_cert_cert_policy_empty");
+	// values are "HIGH", "MEDIUM", or "LOW".
+	// Results not listed here use the default mapping (Error→HIGH, Warn→MEDIUM).
 	SeverityOverrides map[string]Severity `yaml:"severity_overrides"`
 }
 
 type Policy struct {
 	Version     string            `yaml:"version"`
-	ZLint       ZLintPolicy       `yaml:"zlint"`
 	CSR         CSRPolicy         `yaml:"csr"`
 	Certificate CertificatePolicy `yaml:"certificate"`
 	Enforcement EnforcementPolicy `yaml:"enforcement"`
@@ -25,17 +24,22 @@ type Policy struct {
 	SMIME       SMIMEPolicy       `yaml:"smime"`
 	TLSServer   TLSServerPolicy   `yaml:"tls_server"`
 	Root        RootPolicy        `yaml:"root"`
+	ZLint       ZLintPolicy       `yaml:"zlint"`
 }
 
 type RootPolicy struct {
-	Enabled                 bool `yaml:"enabled"`
-	MinRSAKeySize           int  `yaml:"min_rsa_key_size"`
+	Enabled       bool `yaml:"enabled"`
+	MinRSAKeySize int  `yaml:"min_rsa_key_size"`
+	// MinECDSACurveBits enforces a minimum ECDSA curve size for root CAs (0 = disabled).
+	MinECDSACurveBits       int  `yaml:"min_ecdsa_curve_bits"`
 	RequireSelfSigned       bool `yaml:"require_self_signed"`
 	RequireKeyUsageCertSign bool `yaml:"require_key_usage_cert_sign"`
 }
 
 type CSRPolicy struct {
-	MinRSAKeySize              int      `yaml:"min_rsa_key_size"`
+	MinRSAKeySize int `yaml:"min_rsa_key_size"`
+	// MinECDSACurveBits enforces a minimum ECDSA curve size for CSR keys (0 = disabled).
+	MinECDSACurveBits          int      `yaml:"min_ecdsa_curve_bits"`
 	AllowedSignatureAlgorithms []string `yaml:"allowed_signature_algorithms"`
 	RequireSAN                 bool     `yaml:"require_san"`
 }
@@ -47,7 +51,8 @@ type CertificatePolicy struct {
 	RequireSAN                 bool     `yaml:"require_san"`
 
 	// MinECDSACurveBits enforces a minimum ECDSA curve security level.
-	// Set to 256 to reject P-192/P-224; 384 to also reject P-256; 0 disables.
+	// Set to 256 to reject P-192 and P-224; set to 384 to also reject P-256.
+	// Zero disables the check.
 	MinECDSACurveBits int `yaml:"min_ecdsa_curve_bits"`
 
 	EnablePQCChecks        bool     `yaml:"enable_pqc_checks"`
@@ -56,8 +61,8 @@ type CertificatePolicy struct {
 }
 
 type EnforcementPolicy struct {
-	Mode   string     `yaml:"mode"`    // audit | preissuance
-	FailOn []Severity `yaml:"fail_on"` // e.g. ["HIGH"]
+	Mode   string     `yaml:"mode"`    // strict-preissuance | audit
+	FailOn []Severity `yaml:"fail_on"` // HIGH, MEDIUM
 }
 
 type EVPolicy struct {

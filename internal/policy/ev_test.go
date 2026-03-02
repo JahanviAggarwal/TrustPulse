@@ -32,9 +32,9 @@ func enabledEVPolicy() *models.EVPolicy {
 
 // evAwarePolicy returns DefaultPolicy with EV checking enabled.
 // The EV rules check p.EV.Enabled from the *Policy argument, not r.Policy,
-// so DefaultPolicy() (EV disabled) silently skips all EV checks.
+// so testPolicy() (EV disabled) silently skips all EV checks.
 func evAwarePolicy() *models.Policy {
-	p := DefaultPolicy()
+	p := testPolicy()
 	p.EV = *enabledEVPolicy()
 	return p
 }
@@ -72,7 +72,7 @@ func TestRuleEV_Disabled_Skipped(t *testing.T) {
 		policyOIDs: []stdasn1.ObjectIdentifier{evPolicyOID},
 	})
 	rule := &RuleEV{Policy: enabledEVPolicy()}
-	vs := rule.ValidateCert(cert.ZCert, DefaultPolicy()) // EV.Enabled=false in policy arg
+	vs := rule.ValidateCert(cert.ZCert, testPolicy()) // EV.Enabled=false in policy arg
 	require.Empty(t, vs, "expected no violations when EV is disabled in the passed policy")
 }
 

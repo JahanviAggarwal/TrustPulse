@@ -41,7 +41,7 @@ func TestECDSACurve_P256_pass(t *testing.T) {
 	cert := mustBuildECDSACert(t, elliptic.P256(), []string{"ecdsa.example.com"})
 	p := defaultCertPolicy()
 	p.MinECDSACurveBits = 256
-	vs := (&RuleUniversalCert{Policy: p}).ValidateCert(cert, DefaultPolicy())
+	vs := (&RuleUniversalCert{Policy: p}).ValidateCert(cert, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "CERT-ECDSA-CURVE-001"))
 }
 
@@ -49,7 +49,7 @@ func TestECDSACurve_P384_pass(t *testing.T) {
 	cert := mustBuildECDSACert(t, elliptic.P384(), []string{"ecdsa.example.com"})
 	p := defaultCertPolicy()
 	p.MinECDSACurveBits = 256
-	vs := (&RuleUniversalCert{Policy: p}).ValidateCert(cert, DefaultPolicy())
+	vs := (&RuleUniversalCert{Policy: p}).ValidateCert(cert, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "CERT-ECDSA-CURVE-001"))
 }
 
@@ -58,7 +58,7 @@ func TestECDSACurve_P224_fail(t *testing.T) {
 	cert := mustBuildECDSACert(t, elliptic.P224(), []string{"ecdsa.example.com"})
 	p := defaultCertPolicy()
 	p.MinECDSACurveBits = 256
-	vs := (&RuleUniversalCert{Policy: p}).ValidateCert(cert, DefaultPolicy())
+	vs := (&RuleUniversalCert{Policy: p}).ValidateCert(cert, testPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "CERT-ECDSA-CURVE-001"),
 		"P-224 should be rejected when minimum is 256 bits")
 }
@@ -68,7 +68,7 @@ func TestECDSACurve_disabled(t *testing.T) {
 	cert := mustBuildECDSACert(t, elliptic.P224(), []string{"ecdsa.example.com"})
 	p := defaultCertPolicy()
 	p.MinECDSACurveBits = 0
-	vs := (&RuleUniversalCert{Policy: p}).ValidateCert(cert, DefaultPolicy())
+	vs := (&RuleUniversalCert{Policy: p}).ValidateCert(cert, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "CERT-ECDSA-CURVE-001"))
 }
 
@@ -76,7 +76,7 @@ func TestECDSACurve_P521_highMin_pass(t *testing.T) {
 	cert := mustBuildECDSACert(t, elliptic.P521(), []string{"ecdsa.example.com"})
 	p := defaultCertPolicy()
 	p.MinECDSACurveBits = 384
-	vs := (&RuleUniversalCert{Policy: p}).ValidateCert(cert, DefaultPolicy())
+	vs := (&RuleUniversalCert{Policy: p}).ValidateCert(cert, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "CERT-ECDSA-CURVE-001"))
 }
 
@@ -84,7 +84,7 @@ func TestECDSACurve_P256_highMin_fail(t *testing.T) {
 	cert := mustBuildECDSACert(t, elliptic.P256(), []string{"ecdsa.example.com"})
 	p := defaultCertPolicy()
 	p.MinECDSACurveBits = 384
-	vs := (&RuleUniversalCert{Policy: p}).ValidateCert(cert, DefaultPolicy())
+	vs := (&RuleUniversalCert{Policy: p}).ValidateCert(cert, testPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "CERT-ECDSA-CURVE-001"),
 		"P-256 should be rejected when minimum is 384 bits")
 }
@@ -97,6 +97,6 @@ func TestECDSACurve_RSANotAffected(t *testing.T) {
 	})
 	p := defaultCertPolicy()
 	p.MinECDSACurveBits = 521
-	vs := (&RuleUniversalCert{Policy: p}).ValidateCert(cert.ZCert, DefaultPolicy())
+	vs := (&RuleUniversalCert{Policy: p}).ValidateCert(cert.ZCert, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "CERT-ECDSA-CURVE-001"))
 }

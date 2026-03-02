@@ -11,14 +11,15 @@
 | Category | Details |
 |---|---|
 | **CA/B Forum Baseline Requirements** | TLS SAN enforcement, max 398-day validity, minimum RSA key size (BR §7.1.4.2.1) |
+| **ECDSA curve enforcement** | Minimum ECDSA curve bit-strength for certificates, CSRs, and Root CAs (rejects P-192/P-224) |
 | **EV Guidelines** | Organization, Country, BusinessCategory subject fields; required EKUs |
 | **S/MIME Baseline Requirements** | EKU, email SAN, digitalSignature KeyUsage, OCSP/CRL revocation info |
-| **Root Program Policies** | Self-signed enforcement, keyCertSign KeyUsage, minimum key size |
+| **Root Program Policies** | Self-signed enforcement, keyCertSign KeyUsage, minimum RSA/ECDSA key size |
 | **RFC 5280** | CA KeyUsage (§4.2.1.3), SAN extension requirements |
 | **Post-Quantum Cryptography (PQC)** | OID allowlist/denylist for NIST PQC algorithms (ML-KEM/Kyber) |
-| **zlint integration** | Runs the full [zmap/zlint](https://github.com/zmap/zlint) lint suite on every certificate |
+| **zlint integration** | Configurable — enable/disable and reclassify individual lint severities via policy YAML |
 | **ASN.1 URI SAN extraction** | Manually parses `GeneralName` sequences to extract URI SANs from CSRs |
-| **Pre-issuance enforcement** | `--mode=preissuance` exits non-zero on policy violations — a drop-in CI/CD gate |
+| **Pre-issuance enforcement** | `--mode=preissuance` exits **1** (policy violation), **2** (input error), or **3** (system error) — a drop-in CI/CD gate |
 | **Policy-as-code** | All rules driven by a human-readable YAML policy file |
 | **JSON & text output** | Machine-readable JSON (default) or human-readable text via `--format=text` |
 
@@ -28,23 +29,29 @@
 
 ```
 TrustPulse/
-├── cmd/trustPulse/
-│   ├── main.go               # CLI entry point — flag parsing, output routing
-│   └── configs/
-│       └── policy.yml        # Default policy configuration
-└── internal/
-    ├── policy/
-    │   ├── engine.go         # Rule engine — registers and evaluates rules
-    │   ├── policy.go         # Policy struct, YAML loader, DefaultPolicy()
-    │   ├── types.go          # Violation, Report, Summary, JSON/text output
-    │   ├── ca_b_br.go        # CA/B Forum BR rules (TLS, universal cert/CSR)
-    │   ├── ev.go             # EV Guidelines rules
-    │   ├── smime.go          # S/MIME BR rules
-    │   └── root.go           # Root Program policy rules
-    ├── validator/
-    │   └── orchestrator.go   # Routes PEM input (cert vs CSR), runs zlint + engine
-    └── checks/
-        └── compliance.go     # Certificate/CSR detail extraction, ASN.1 URI SAN parser
+├── .github/
+│   └── workflows/
+│       └── go-test.yml       # CI — runs go test ./... on push/PR
+├── cmd/
+│   └── trustPulse/
+│       └── main.go           # CLI entry point — flag parsing, policy resolution, output routing
+├── internal/
+│   ├── models/
+│   │   ├── policy.go         # Policy struct and all sub-policy types (CertificatePolicy, SMIMEPolicy, …)
+│   │   ├── rules.go          # Rule interface definition
+│   │   └── types.go          # Violation, Report, Summary types; JSON/text rendering
+│   ├── policy/
+│   │   ├── engine.go         # Rule engine — registers and evaluates Rule implementations
+│   │   ├── policy.go         # YAML policy loader (LoadPolicy)
+│   │   ├── ca_b_br.go        # CA/B Forum BR rules (TLS, universal cert/CSR, PQC)
+│   │   ├── ev.go             # EV Guidelines rules
+│   │   ├── smime.go          # S/MIME BR rules
+│   │   └── root.go           # Root Program policy rules
+│   ├── validator/
+│   │   └── orchestrator.go   # Routes PEM input (cert vs CSR), runs zlint + engine
+│   └── checks/
+│       └── compliance.go     # Certificate/CSR detail extraction, ASN.1 URI SAN parser
+└── policy.yaml               # Default policy file — place in CWD or pass via --policy
 ```
 
 ### How it works
@@ -68,7 +75,7 @@ Or build from source:
 
 ```bash
 git clone https://github.com/JahanviAggarwal/TrustPulse.git
-cd TrustPulse/TrustPulse
+cd TrustPulse
 go build -o trustpulse ./cmd/trustPulse
 ```
 
@@ -79,34 +86,36 @@ go build -o trustpulse ./cmd/trustPulse
 ### Audit a certificate (JSON output, default)
 
 ```bash
-./trustpulse cert.pem
+./trustpulse --file=cert.pem
 ```
 
 ### Audit a certificate (human-readable text)
 
 ```bash
-./trustpulse --format=text cert.pem
+./trustpulse --file=cert.pem --format=text
 ```
 
 ### Validate a CSR before issuance (blocks on HIGH violations)
 
 ```bash
-./trustpulse --mode=preissuance --policy=policy.yml csr.pem
+./trustpulse --file=csr.pem --mode=preissuance --policy=policy.yaml
 ```
 
 ### Use a custom policy file
 
 ```bash
-./trustpulse --policy=configs/policy.yml cert.pem
+./trustpulse --file=cert.pem --policy=/path/to/custom-policy.yaml
 ```
 
 ### Flags
 
 | Flag | Default | Description |
 |---|---|---|
+| `--file` | *(required)* | Path to the PEM file (certificate or CSR) to audit |
 | `--mode` | `audit` | `audit` (report only) or `preissuance` (exit 1 on violations matching `fail_on`) |
-| `--policy` | built-in defaults | Path to a YAML policy file |
+| `--policy` | auto-detect `policy.yaml`/`policy.yml` in CWD | Path to a YAML policy file; errors if not found |
 | `--format` | `json` | `json` (machine-readable) or `text` (human-readable) |
+| `--version` | — | Print version string and exit |
 
 ---
 

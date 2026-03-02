@@ -26,7 +26,7 @@ func TestRuleSMIME_Disabled_Skipped(t *testing.T) {
 		subject: stdpkix.Name{CommonName: "no-smime.example.com"},
 	})
 	rule := &RuleSMIME{Policy: &models.SMIMEPolicy{Enabled: false}}
-	vs := rule.ValidateCert(cert.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(cert.ZCert, testPolicy())
 	require.Empty(t, vs, "expected no violations when S/MIME policy is disabled")
 }
 
@@ -37,7 +37,7 @@ func TestRuleSMIME_NonSMIME_Skipped(t *testing.T) {
 		extKeyUsages: []stdx509.ExtKeyUsage{stdx509.ExtKeyUsageServerAuth},
 	})
 	rule := &RuleSMIME{Policy: enabledSMIMEPolicy()}
-	vs := rule.ValidateCert(cert.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(cert.ZCert, testPolicy())
 	require.Empty(t, vs, "expected no violations for non-S/MIME cert (no emailProtection EKU)")
 }
 
@@ -50,7 +50,7 @@ func TestRuleSMIME_AllPass(t *testing.T) {
 		ocspServers:    []string{"http://ocsp.example.com"},
 	})
 	rule := &RuleSMIME{Policy: enabledSMIMEPolicy()}
-	vs := rule.ValidateCert(cert.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(cert.ZCert, testPolicy())
 	require.Empty(t, vs, "expected no violations for fully compliant S/MIME cert")
 }
 
@@ -67,7 +67,7 @@ func TestRuleSMIME_EKU_Fail(t *testing.T) {
 	p := enabledSMIMEPolicy()
 	p.RequireEKU = []zcrypto.ExtKeyUsage{zcrypto.ExtKeyUsageClientAuth}
 	rule := &RuleSMIME{Policy: p}
-	vs := rule.ValidateCert(cert.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(cert.ZCert, testPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "SMIME-EKU-MISSING"),
 		"expected SMIME-EKU-MISSING when required EKU (clientAuth) is absent")
 }
@@ -81,7 +81,7 @@ func TestRuleSMIME_Email_Fail(t *testing.T) {
 		ocspServers:  []string{"http://ocsp.example.com"},
 	})
 	rule := &RuleSMIME{Policy: enabledSMIMEPolicy()}
-	vs := rule.ValidateCert(cert.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(cert.ZCert, testPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "SMIME-SAN-MISSING"),
 		"expected SMIME-SAN-MISSING for cert without email SAN")
 }
@@ -95,7 +95,7 @@ func TestRuleSMIME_DigitalSignature_Fail(t *testing.T) {
 		ocspServers:    []string{"http://ocsp.example.com"},
 	})
 	rule := &RuleSMIME{Policy: enabledSMIMEPolicy()}
-	vs := rule.ValidateCert(cert.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(cert.ZCert, testPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "SMIME-KEYUSAGE-INVALID"),
 		"expected SMIME-KEYUSAGE-INVALID for cert without digitalSignature")
 }
@@ -109,7 +109,7 @@ func TestRuleSMIME_Revocation_Fail(t *testing.T) {
 		// no ocspServers, no crlDPs
 	})
 	rule := &RuleSMIME{Policy: enabledSMIMEPolicy()}
-	vs := rule.ValidateCert(cert.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(cert.ZCert, testPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "SMIME-REVOCATION-MISSING"),
 		"expected SMIME-REVOCATION-MISSING for cert without OCSP or CRL")
 }
@@ -123,7 +123,7 @@ func TestRuleSMIME_CRL_Satisfies_Revocation(t *testing.T) {
 		crlDPs:         []string{"http://crl.example.com/root.crl"},
 	})
 	rule := &RuleSMIME{Policy: enabledSMIMEPolicy()}
-	vs := rule.ValidateCert(cert.ZCert, DefaultPolicy())
+	vs := rule.ValidateCert(cert.ZCert, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "SMIME-REVOCATION-MISSING"),
 		"expected no SMIME-REVOCATION-MISSING when CRL DP is present")
 }
@@ -134,7 +134,7 @@ func TestRuleSMIME_CSR_Pass(t *testing.T) {
 		emailAddresses: []string{"user@example.com"},
 	})
 	rule := &RuleSMIME{Policy: enabledSMIMEPolicy()}
-	vs := rule.ValidateCSR(csr, DefaultPolicy())
+	vs := rule.ValidateCSR(csr, testPolicy())
 	require.False(t, ptrViolationsHaveID(vs, "SMIME-SAN-MISSING"),
 		"expected no SMIME-SAN-MISSING for CSR with email SAN")
 }
@@ -145,7 +145,7 @@ func TestRuleSMIME_CSR_NoEmail_Fail(t *testing.T) {
 		dnsNames: []string{"smime.example.com"},
 	})
 	rule := &RuleSMIME{Policy: enabledSMIMEPolicy()}
-	vs := rule.ValidateCSR(csr, DefaultPolicy())
+	vs := rule.ValidateCSR(csr, testPolicy())
 	require.True(t, ptrViolationsHaveID(vs, "SMIME-SAN-MISSING"),
 		"expected SMIME-SAN-MISSING for CSR without email SAN")
 }
